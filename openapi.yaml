@@ -1,0 +1,1499 @@
+openapi: 3.1.0
+info:
+  title: Sistema de Cobranzas - API
+  description: |
+    API para la aplicación móvil del Sistema de Cobranzas con arquitectura multitenant.
+    
+    Esta API permite a los cobradores:
+    * Autenticarse mediante OTP (One-Time Password) por email o teléfono
+    * Ver sus carteras asignadas y clientes
+    * Consultar facturas pendientes de cobro
+    * Registrar pagos con geolocalización
+    * Consultar historiales de pago
+    
+    La API utiliza autenticación basada en tokens y sigue el principio
+    de filtrado por organización para garantizar que cada usuario solo acceda a los
+    datos que le corresponden según su rol y asignaciones.
+  version: 1.2.0
+  contact:
+    email: soporte@sistemacobranzas.com
+servers:
+  - url: https://api.sistemacobranzas.com/v1
+    description: Servidor de producción
+  - url: https://sandbox.sistemacobranzas.com/v1
+    description: Servidor de pruebas
+paths:
+  /auth/otp/request:
+    post:
+      summary: Solicitar código OTP
+      description: Envía un código OTP al correo o número de teléfono del usuario
+      tags:
+        - Autenticación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: cobrador@empresa.com
+                phone:
+                  type: string
+                  example: "+51999309748"
+                device_info:
+                  type: string
+                  example: "iPhone 12, iOS 15.0"
+                organization_code:
+                  type: string
+                  example: "263274"
+              oneOf:
+                - required: [email]
+                - required: [phone]
+      responses:
+        '200':
+          description: OTP enviado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  message:
+                    type: string
+                    example: "OTP sent successfully"
+                  data:
+                    type: object
+                    properties:
+                      email:
+                        type: string
+                        example: "cobrador@empresa.com"
+                      phone:
+                        type: string
+                        example: "+51999309748"
+                      organization_code:
+                        type: string
+                        example: "263274"
+                      device_info:
+                        type: string
+                        example: "iPhone 12, iOS 15.0"
+                      expires_in:
+                        type: string
+                        example: "5 minutes"
+        '400':
+          description: Solicitud inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Usuario no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth/otp/verify:
+    post:
+      summary: Verificar código OTP
+      description: Verifica el código OTP y genera un token de acceso
+      tags:
+        - Autenticación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: cobrador@empresa.com
+                phone:
+                  type: string
+                  example: "+51999309748"
+                code:
+                  type: string
+                  example: "123456"
+                device_info:
+                  type: string
+                  example: "iPhone 12, iOS 15.0"
+              required:
+                - code
+              oneOf:
+                - required: [email]
+                - required: [phone]
+      responses:
+        '200':
+          description: OTP verificado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  message:
+                    type: string
+                    example: "OTP verified successfully"
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                        example: "23e0dd25f8536379e600271784e7dac460592bcb31ef73a0590d0330d1c9083d"
+                      expires_in:
+                        type: string
+                        example: "30 days"
+                      token_type:
+                        type: string
+                        example: "Bearer"
+                      user:
+                        type: object
+                        properties:
+                          id:
+                            type: integer
+                            example: 3
+                          name:
+                            type: string
+                            example: "Carlos Vidal"
+                          email:
+                            type: string
+                            example: "carlos@mitienda.pe"
+                          phone:
+                            type: string
+                            example: "+51999309748"
+                          role:
+                            type: string
+                            example: "admin"
+                          organization:
+                            type: object
+                            properties:
+                              id:
+                                type: integer
+                                example: 1
+                              name:
+                                type: string
+                                example: "Carlos Vidal"
+                              code:
+                                type: string
+                                example: "263274"
+        '400':
+          description: Código OTP inválido o expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Usuario no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth/refresh:
+    post:
+      summary: Refrescar token JWT
+      description: Genera un nuevo token JWT basado en un token válido existente. Útil para extender sesiones sin requerir un nuevo OTP.
+      tags:
+        - Autenticación
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Token refrescado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  token:
+                    type: string
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  expires_in:
+                    type: integer
+                    example: 86400
+                    description: Tiempo de expiración del token en segundos
+        '401':
+          description: Token inválido o expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth/profile:
+    get:
+      summary: Obtener perfil del usuario
+      description: |
+        Obtiene la información del perfil del usuario autenticado.
+        Este endpoint puede ser utilizado por la aplicación móvil para obtener los datos del usuario
+        después de la verificación OTP. Acepta el token en el encabezado Authorization o como parámetro de consulta.
+      tags:
+        - Autenticación
+      parameters:
+        - name: token
+          in: query
+          required: false
+          description: Token de autenticación (alternativa al encabezado Authorization)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Perfil del usuario obtenido exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "User profile retrieved successfully"
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/User'
+                      organization:
+                        $ref: '#/components/schemas/Organization'
+                      token:
+                        type: string
+                        example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        '400':
+          description: No se proporcionó token de autenticación
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "No authentication token provided"
+                  data:
+                    type: object
+                    nullable: true
+                    example: null
+        '401':
+          description: Token inválido o usuario no encontrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Invalid token"
+                  data:
+                    type: object
+                    nullable: true
+                    example: null
+  /auth/me:
+    get:
+      summary: Obtener información del usuario autenticado
+      description: |
+        Obtiene la información del usuario autenticado.
+        Requiere autenticación mediante token en el encabezado Authorization.
+      tags:
+        - Autenticación
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Información del usuario obtenida exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/User'
+                      organization:
+                        $ref: '#/components/schemas/Organization'
+        '401':
+          description: No autenticado o token inválido
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Not authenticated"
+  /users/me:
+    get:
+      summary: Obtener perfil del usuario actual
+      description: |
+        Obtiene el perfil del usuario actual, incluyendo sus carteras asignadas.
+        Requiere autenticación mediante token en el encabezado Authorization.
+      tags:
+        - Usuarios
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Perfil del usuario obtenido exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    allOf:
+                      - $ref: '#/components/schemas/User'
+                      - type: object
+                        properties:
+                          portfolios:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Portfolio'
+        '404':
+          description: Usuario no encontrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "User not found"
+  /user/profile:
+    get:
+      summary: Obtener perfil del usuario
+      description: Obtiene la información del perfil del usuario autenticado
+      tags:
+        - Usuario
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Perfil obtenido correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /user/portfolios:
+    get:
+      summary: Obtener carteras del usuario
+      description: Obtiene las carteras asignadas al usuario autenticado. Las carteras están filtradas por la organización del usuario, y para usuarios normales, solo se muestran las carteras específicamente asignadas a ellos.
+      tags:
+        - Usuario
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Carteras obtenidas correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  portfolios:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Portfolio'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /clients:
+    get:
+      summary: Obtener clientes
+      description: Obtiene la lista de clientes asociados a las carteras del usuario
+      tags:
+        - Clientes
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: portfolio_id
+          schema:
+            type: integer
+          description: ID de la cartera para filtrar clientes
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Término de búsqueda (nombre, documento, etc.)
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Número de página
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+          description: Número de resultados por página
+      responses:
+        '200':
+          description: Clientes obtenidos correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  clients:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Client'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /clients/{id}:
+    get:
+      summary: Obtener cliente por ID
+      description: Obtiene la información detallada de un cliente específico
+      tags:
+        - Clientes
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: ID del cliente
+      responses:
+        '200':
+          description: Cliente obtenido correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  client:
+                    $ref: '#/components/schemas/Client'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Cliente no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /invoices:
+    get:
+      summary: Obtener facturas
+      description: Obtiene la lista de facturas asociadas a los clientes de las carteras del usuario
+      tags:
+        - Facturas
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: client_id
+          schema:
+            type: integer
+          description: ID del cliente para filtrar facturas
+        - in: query
+          name: portfolio_id
+          schema:
+            type: integer
+          description: ID de la cartera para filtrar facturas
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, paid, cancelled, rejected]
+          description: Estado de las facturas
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Término de búsqueda (número de factura, concepto, etc.)
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Número de página
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+          description: Número de resultados por página
+      responses:
+        '200':
+          description: Facturas obtenidas correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  invoices:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Invoice'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /invoices/{id}:
+    get:
+      summary: Obtener factura por ID
+      description: Obtiene la información detallada de una factura específica
+      tags:
+        - Facturas
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: ID de la factura
+      responses:
+        '200':
+          description: Factura obtenida correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  invoice:
+                    $ref: '#/components/schemas/Invoice'
+                  client:
+                    $ref: '#/components/schemas/Client'
+                  payments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Payment'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Factura no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /payments:
+    get:
+      summary: Obtener pagos
+      description: Obtiene la lista de pagos registrados por el usuario
+      tags:
+        - Pagos
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: date_start
+          schema:
+            type: string
+            format: date
+          description: Fecha de inicio para filtrar pagos (YYYY-MM-DD)
+        - in: query
+          name: date_end
+          schema:
+            type: string
+            format: date
+          description: Fecha de fin para filtrar pagos (YYYY-MM-DD)
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Número de página
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+          description: Número de resultados por página
+      responses:
+        '200':
+          description: Pagos obtenidos correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  payments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Payment'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Registrar pago
+      description: Registra un nuevo pago para una factura
+      tags:
+        - Pagos
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - invoice_id
+                - amount
+                - payment_method
+              properties:
+                invoice_id:
+                  type: integer
+                  example: 123
+                amount:
+                  type: number
+                  format: float
+                  example: 1500.50
+                payment_method:
+                  type: string
+                  enum: [cash, transfer, check, credit_card, debit_card, qr_code, other]
+                  example: cash
+                reference_code:
+                  type: string
+                  example: "REF-12345"
+                notes:
+                  type: string
+                  example: "Pago realizado en oficina del cliente"
+                latitude:
+                  type: number
+                  format: float
+                  example: -25.284447
+                longitude:
+                  type: number
+                  format: float
+                  example: -57.647433
+      responses:
+        '201':
+          description: Pago registrado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  payment:
+                    $ref: '#/components/schemas/Payment'
+                  message:
+                    type: string
+                    example: Pago registrado exitosamente
+        '400':
+          description: Solicitud inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Factura no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /payments/{id}:
+    get:
+      summary: Obtener pago por ID
+      description: Obtiene la información detallada de un pago específico
+      tags:
+        - Pagos
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: ID del pago
+      responses:
+        '200':
+          description: Pago obtenido correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  payment:
+                    $ref: '#/components/schemas/Payment'
+                  invoice:
+                    $ref: '#/components/schemas/Invoice'
+                  client:
+                    $ref: '#/components/schemas/Client'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Pago no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /portfolio/invoices:
+    get:
+      summary: Obtener facturas de la cartera
+      description: Obtiene la lista de facturas asociadas a los clientes de la cartera del cobrador
+      tags:
+        - Cartera
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filtrar por estado de factura
+          schema:
+            type: string
+            enum: [pending, paid, cancelled, rejected, expired]
+        - name: date_start
+          in: query
+          description: Fecha de inicio para filtrar (formato YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+        - name: date_end
+          in: query
+          description: Fecha de fin para filtrar (formato YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Lista de facturas obtenida correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invoices:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/Invoice'
+                        - type: object
+                          properties:
+                            client_name:
+                              type: string
+                              example: "Empresa ABC S.A."
+                            client_phone:
+                              type: string
+                              example: "+51999309748"
+                            client_email:
+                              type: string
+                              example: "contacto@empresaabc.com"
+                            client_address:
+                              type: string
+                              example: "Av. Principal 123, Lima"
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Acceso prohibido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /portfolio/my:
+    get:
+      summary: Obtener carteras asignadas
+      description: Obtiene la lista de carteras asignadas al cobrador
+      tags:
+        - Cartera
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lista de carteras obtenida correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  portfolios:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Portfolio'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /payments/search-invoices:
+    get:
+      summary: Buscar facturas para registrar pagos
+      description: Busca facturas por número, cliente o ID externo para registrar pagos
+      tags:
+        - Pagos
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          description: Término de búsqueda (número de factura, nombre de cliente, ID externo)
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Resultados de búsqueda obtenidos correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invoices:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/Invoice'
+                        - type: object
+                          properties:
+                            client_name:
+                              type: string
+                              example: "Empresa ABC S.A."
+                            client_phone:
+                              type: string
+                              example: "+51999309748"
+                            client_email:
+                              type: string
+                              example: "contacto@empresaabc.com"
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Acceso prohibido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /payments/register:
+    post:
+      summary: Registrar pago desde la aplicación móvil
+      description: Registra un pago para una factura desde la aplicación móvil
+      tags:
+        - Pagos
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                invoice_id:
+                  type: integer
+                  example: 123
+                amount:
+                  type: number
+                  format: float
+                  example: 1500.00
+                payment_method:
+                  type: string
+                  example: "efectivo"
+                payment_date:
+                  type: string
+                  format: date-time
+                  example: "2025-03-28T10:30:00"
+                reference_code:
+                  type: string
+                  example: "REF-12345"
+                notes:
+                  type: string
+                  example: "Pago recibido en oficina del cliente"
+                latitude:
+                  type: number
+                  format: float
+                  example: -12.0464
+                longitude:
+                  type: number
+                  format: float
+                  example: -77.0428
+              required:
+                - invoice_id
+                - amount
+                - payment_method
+                - payment_date
+      responses:
+        '201':
+          description: Pago registrado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payment:
+                    $ref: '#/components/schemas/Payment'
+                  message:
+                    type: string
+                    example: "Payment registered successfully"
+        '400':
+          description: Datos de pago inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Acceso prohibido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Factura no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /payments/generate-qr/{id}:
+    get:
+      summary: Generar código QR para pago Ligo
+      description: Genera un código QR para realizar un pago mediante Ligo
+      tags:
+        - Pagos
+        - Ligo
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: ID de la factura
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Código QR generado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  qr_data:
+                    type: string
+                    example: "00020101021226580014br.gov.bcb.pix0136123e4567-e89b-12d3-a456-426655440000"
+                  qr_image_url:
+                    type: string
+                    format: uri
+                    example: "https://api.ligo.pe/v1/qr/123456789"
+                  order_id:
+                    type: string
+                    example: "ORD-123456"
+                  expiration:
+                    type: string
+                    format: date-time
+                    example: "2025-03-28T12:30:00Z"
+        '400':
+          description: Error al generar código QR
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Acceso prohibido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Factura no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /webhooks/ligo:
+    post:
+      summary: Webhook para notificaciones de pago Ligo
+      description: Recibe notificaciones de pagos procesados por Ligo
+      tags:
+        - Webhooks
+        - Ligo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  example: "payment.succeeded"
+                data:
+                  type: object
+                  properties:
+                    order_id:
+                      type: string
+                      example: "123"
+                    payment_id:
+                      type: string
+                      example: "PAY-123456"
+                    amount:
+                      type: number
+                      format: float
+                      example: 1500.00
+                    status:
+                      type: string
+                      example: "completed"
+              required:
+                - type
+                - data
+      responses:
+        '200':
+          description: Notificación procesada correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Payment processed successfully"
+        '400':
+          description: Payload inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Firma inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Factura no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth/ligo/token:
+    get:
+      summary: Obtener token de autenticación Ligo
+      description: Obtiene un token de autenticación para la API de Ligo
+      tags:
+        - Autenticación
+        - Ligo
+      responses:
+        '200':
+          description: Token obtenido correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  expires_in:
+                    type: integer
+                    example: 3600
+        '400':
+          description: Error al obtener token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Utilice el token JWT obtenido en la verificación OTP.
+        El token contiene la información del usuario y su contexto de organización.
+  schemas:
+    User:
+      type: object
+      description: |
+        Representa a un usuario del sistema. Cada usuario pertenece a una organización específica,
+        excepto los superadmins que pueden acceder a todas las organizaciones.
+      properties:
+        id:
+          type: integer
+          example: 1
+          description: Identificador único del usuario
+        name:
+          type: string
+          example: Juan Pérez
+          description: Nombre completo del usuario
+        email:
+          type: string
+          format: email
+          example: juan.perez@empresa.com
+          description: Correo electrónico (utilizado para autenticación OTP)
+        role:
+          type: string
+          enum: [superadmin, admin, user]
+          example: user
+          description: Rol del usuario (superadmin=acceso global, admin=administrador de organización, user=cobrador)
+        organization_id:
+          type: integer
+          example: 1
+          description: ID de la organización a la que pertenece el usuario
+        organization_name:
+          type: string
+          example: Empresa ABC
+          description: Nombre de la organización a la que pertenece el usuario
+        created_at:
+          type: string
+          format: date-time
+          example: 2025-03-19T10:00:00Z
+          description: Fecha de creación del usuario
+        portfolios_count:
+          type: integer
+          example: 3
+          description: Cantidad de carteras asignadas al usuario
+    Portfolio:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Cartera Principal"
+        description:
+          type: string
+          example: "Cartera de clientes principales de la empresa"
+        organization_id:
+          type: integer
+          example: 1
+        collector_id:
+          type: integer
+          example: 5
+        status:
+          type: string
+          enum: [active, inactive]
+          example: "active"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-15T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-03-20T14:15:00Z"
+      required:
+        - id
+        - name
+        - organization_id
+        - collector_id
+        - status
+    Client:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        uuid:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        business_name:
+          type: string
+          example: Empresa XYZ S.A.
+        document_number:
+          type: string
+          example: 80012345-0
+        contact_name:
+          type: string
+          example: María González
+        email:
+          type: string
+          format: email
+          example: contacto@empresaxyz.com
+        phone:
+          type: string
+          example: +595 981 123456
+        address:
+          type: string
+          example: Avda. Mcal. López 1234, Asunción
+        status:
+          type: string
+          enum: [active, inactive]
+          example: active
+        latitude:
+          type: number
+          format: float
+          example: -25.284447
+        longitude:
+          type: number
+          format: float
+          example: -57.647433
+        organization_id:
+          type: integer
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+          example: 2025-03-19T10:00:00Z
+        updated_at:
+          type: string
+          format: date-time
+          example: 2025-03-19T10:00:00Z
+        invoices_count:
+          type: integer
+          example: 12
+        invoices_amount:
+          type: number
+          format: float
+          example: 25000.00
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        client_id:
+          type: integer
+          example: 1
+        client_name:
+          type: string
+          example: Empresa XYZ S.A.
+        document_number:
+          type: string
+          example: 80012345-0
+        invoice_number:
+          type: string
+          example: A-001-0012345
+        concept:
+          type: string
+          example: Servicio de consultoría
+        amount:
+          type: number
+          format: float
+          example: 1500.00
+        due_date:
+          type: string
+          format: date
+          example: 2025-04-30
+        status:
+          type: string
+          enum: [pending, paid, cancelled, rejected]
+          example: pending
+        external_id:
+          type: string
+          example: EXT-12345
+        notes:
+          type: string
+          example: Factura de servicios prestados en marzo
+        organization_id:
+          type: integer
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+          example: 2025-03-19T10:00:00Z
+        updated_at:
+          type: string
+          format: date-time
+          example: 2025-03-19T10:00:00Z
+        payments_count:
+          type: integer
+          example: 0
+        payments_amount:
+          type: number
+          format: float
+          example: 0.00
+        days_overdue:
+          type: integer
+          example: 0
+    Payment:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        invoice_id:
+          type: integer
+          example: 123
+        user_id:
+          type: integer
+          example: 45
+        collector_name:
+          type: string
+          example: Juan Pérez
+        amount:
+          type: number
+          format: float
+          example: 1500.50
+        payment_method:
+          type: string
+          enum: [cash, transfer, check, credit_card, debit_card, qr_code, other]
+          example: cash
+        reference_code:
+          type: string
+          example: REF-12345
+        payment_date:
+          type: string
+          format: date-time
+          example: 2025-03-19T15:30:00Z
+        status:
+          type: string
+          enum: [completed, pending]
+          example: completed
+        notes:
+          type: string
+          example: Pago realizado en oficina del cliente
+        latitude:
+          type: number
+          format: float
+          example: -25.284447
+        longitude:
+          type: number
+          format: float
+          example: -57.647433
+        is_notified:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: 2025-03-19T15:30:00Z
+        updated_at:
+          type: string
+          format: date-time
+          example: 2025-03-19T15:30:00Z
+        invoice_number:
+          type: string
+          example: A-001-0012345
+        business_name:
+          type: string
+          example: Empresa XYZ S.A.
+    Pagination:
+      type: object
+      properties:
+        current_page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 20
+        total_pages:
+          type: integer
+          example: 5
+        total_items:
+          type: integer
+          example: 87
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: Error message
+        code:
+          type: string
+          example: INVALID_REQUEST

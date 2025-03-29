@@ -6,9 +6,10 @@ import 'providers/auth_provider.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/otp_verification_screen.dart';
-import 'screens/account_list_screen.dart';
-import 'screens/account_map_screen.dart';
-import 'screens/account_detail_screen.dart';
+// Importaciones con nomenclatura "invoice"
+import 'screens/invoice_list_screen.dart';
+import 'screens/invoice_map_screen.dart';
+import 'screens/invoice_detail_screen.dart';
 import 'screens/register_payment_screen.dart';
 
 class AppRouter {
@@ -34,9 +35,21 @@ class AppRouter {
           return '/login';
         }
         
-        // Si está autenticado y está en la ruta de login o verificación OTP, redirigir a la lista de cuentas
+        // Si está autenticado y está en la ruta de login o verificación OTP, redirigir a la lista de facturas
         if (isLoggedIn && (isLoginRoute || isOtpRoute)) {
-          return '/accounts';
+          return '/invoices';
+        }
+        
+        // Redirecciones para rutas antiguas
+        if (state.matchedLocation == '/accounts') {
+          return '/invoices';
+        }
+        if (state.matchedLocation == '/map') {
+          return '/invoice-map';
+        }
+        if (state.matchedLocation.startsWith('/account-detail/')) {
+          final accountId = state.pathParameters['id']!;
+          return '/invoice-detail/$accountId';
         }
         
         // No hay redirección
@@ -59,34 +72,30 @@ class AppRouter {
             return OtpVerificationScreen(email: email, method: method);
           },
         ),
+        // Rutas con nomenclatura "invoice"
         GoRoute(
-          path: '/accounts',
-          builder: (context, state) => const AccountListScreen(),
+          path: '/invoices',
+          builder: (context, state) => const InvoiceListScreen(),
         ),
         GoRoute(
-          path: '/map',
-          builder: (context, state) => const AccountMapScreen(),
+          path: '/invoice-map',
+          builder: (context, state) => const InvoiceMapScreen(),
         ),
         GoRoute(
-          path: '/account-detail/:id',
+          path: '/invoice-detail/:id',
           builder: (context, state) {
-            final accountId = state.pathParameters['id']!;
-            return AccountDetailScreen(accountId: accountId);
+            final invoiceAccountId = state.pathParameters['id']!;
+            return InvoiceDetailScreen(invoiceAccountId: invoiceAccountId);
           },
         ),
         GoRoute(
           path: '/register-payment/:id',
           builder: (context, state) {
-            final accountId = state.pathParameters['id']!;
-            return RegisterPaymentScreen(accountId: accountId);
+            final id = state.pathParameters['id']!;
+            return RegisterPaymentScreen(invoiceAccountId: id);
           },
         ),
       ],
-      errorBuilder: (context, state) => Scaffold(
-        body: Center(
-          child: Text('Error: ${state.error}'),
-        ),
-      ),
     );
   }
 }

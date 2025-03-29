@@ -4,7 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'providers/auth_provider.dart';
-import 'providers/account_provider.dart';
+import 'providers/invoice_account_provider.dart';
+import 'providers/client_provider.dart';
 import 'routes.dart';
 
 void main() {
@@ -20,7 +21,8 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => AccountProvider()),
+        ChangeNotifierProvider(create: (_) => InvoiceAccountProvider()),
+        ChangeNotifierProvider(create: (_) => ClientProvider()),
       ],
       child: Builder(
         builder: (context) {

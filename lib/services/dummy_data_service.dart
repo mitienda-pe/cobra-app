@@ -1,11 +1,11 @@
 import 'package:latlong2/latlong.dart';
-import '../models/account.dart';
+import '../models/invoice_account.dart';
 import '../models/payment.dart';
 
 class DummyDataService {
-  static List<Account> getAccounts() {
+  static List<InvoiceAccount> getInvoiceAccounts() {
     return [
-      Account(
+      InvoiceAccount(
         id: '1',
         customer: Customer(
           id: '101',
@@ -20,14 +20,15 @@ class DummyDataService {
           ),
         ),
         concept: 'Venta de materiales de construcción',
+        invoiceNumber: 'F001-00001',
         expirationDate: DateTime.now().add(const Duration(days: 5)),
         totalAmount: 1500.0,
         paidAmount: 500.0,
-        status: AccountStatus.partiallyPaid,
+        status: InvoiceAccountStatus.partiallyPaid,
         payments: [
           Payment(
             id: 'p1',
-            accountId: '1',
+            invoiceAccountId: '1',
             amount: 500.0,
             date: DateTime.now().subtract(const Duration(days: 5)),
             method: PaymentMethod.cash,
@@ -36,7 +37,7 @@ class DummyDataService {
           ),
         ],
       ),
-      Account(
+      InvoiceAccount(
         id: '2',
         customer: Customer(
           id: '102',
@@ -50,17 +51,19 @@ class DummyDataService {
             location: LatLng(-12.056374, -77.032793),
           ),
         ),
-        concept: 'Suministro de harina',
-        expirationDate: DateTime.now().subtract(const Duration(days: 2)),
+        concept: 'Compra de insumos para panadería',
+        invoiceNumber: 'F001-00002',
+        expirationDate: DateTime.now().subtract(const Duration(days: 10)),
         totalAmount: 800.0,
         paidAmount: 0.0,
-        status: AccountStatus.expired,
+        status: InvoiceAccountStatus.expired,
+        payments: [],
       ),
-      Account(
+      InvoiceAccount(
         id: '3',
         customer: Customer(
           id: '103',
-          commercialName: 'Restaurante El Sabor',
+          commercialName: 'Restaurante El Buen Sabor',
           legalName: 'Gastronomía Peruana E.I.R.L.',
           ruc: '20567891234',
           contact: Contact(
@@ -70,77 +73,42 @@ class DummyDataService {
             location: LatLng(-12.076374, -77.052793),
           ),
         ),
-        concept: 'Suministro de insumos alimenticios',
+        concept: 'Servicio de catering para evento',
+        invoiceNumber: 'F001-00003',
         expirationDate: DateTime.now().add(const Duration(days: 15)),
         totalAmount: 2500.0,
         paidAmount: 0.0,
-        status: AccountStatus.pending,
+        status: InvoiceAccountStatus.pending,
+        payments: [],
       ),
-      Account(
+      InvoiceAccount(
         id: '4',
         customer: Customer(
           id: '104',
-          commercialName: 'Farmacia Salud Total',
-          legalName: 'Medicamentos y Salud S.A.',
+          commercialName: 'Librería El Saber',
+          legalName: 'Distribuidora de Libros S.A.',
           ruc: '20345678912',
           contact: Contact(
-            name: 'Ana Gómez',
-            address: 'Jr. Huancavelica 321, Lima',
-            phone: '956781234',
-            location: LatLng(-12.036374, -77.062793),
-          ),
-        ),
-        concept: 'Suministro de productos farmacéuticos',
-        expirationDate: DateTime.now().add(const Duration(days: 10)),
-        totalAmount: 3000.0,
-        paidAmount: 3000.0,
-        status: AccountStatus.paid,
-        payments: [
-          Payment(
-            id: 'p2',
-            accountId: '4',
-            amount: 1500.0,
-            date: DateTime.now().subtract(const Duration(days: 20)),
-            method: PaymentMethod.transfer,
-            reconciliationCode: 'TR-12345',
-          ),
-          Payment(
-            id: 'p3',
-            accountId: '4',
-            amount: 1500.0,
-            date: DateTime.now().subtract(const Duration(days: 10)),
-            method: PaymentMethod.pos,
-            reconciliationCode: 'POS-67890',
-          ),
-        ],
-      ),
-      Account(
-        id: '5',
-        customer: Customer(
-          id: '105',
-          commercialName: 'Librería El Saber',
-          legalName: 'Libros y Útiles S.A.C.',
-          ruc: '20678912345',
-          contact: Contact(
-            name: 'Pedro Díaz',
-            address: 'Av. Arequipa 654, Lima',
-            phone: '967812345',
+            name: 'Ana García',
+            address: 'Jr. Arequipa 321, Lima',
+            phone: '978123456',
             location: LatLng(-12.086374, -77.022793),
           ),
         ),
-        concept: 'Venta de útiles escolares',
-        expirationDate: DateTime.now().add(const Duration(days: 3)),
+        concept: 'Compra de libros escolares',
+        invoiceNumber: 'F001-00004',
+        expirationDate: DateTime.now().subtract(const Duration(days: 5)),
         totalAmount: 1200.0,
-        paidAmount: 600.0,
-        status: AccountStatus.partiallyPaid,
+        paidAmount: 1200.0,
+        status: InvoiceAccountStatus.paid,
         payments: [
           Payment(
-            id: 'p4',
-            accountId: '5',
-            amount: 600.0,
+            id: 'p2',
+            invoiceAccountId: '4',
+            amount: 1200.0,
             date: DateTime.now().subtract(const Duration(days: 7)),
-            method: PaymentMethod.qr,
-            reconciliationCode: 'QR-54321',
+            method: PaymentMethod.transfer,
+            reconciliationCode: 'TRF123456',
           ),
         ],
       ),

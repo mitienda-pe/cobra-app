@@ -3,14 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import '../models/account.dart';
+import '../models/invoice_account.dart';
 import '../models/payment.dart';
-import '../providers/account_provider.dart';
+import '../providers/invoice_account_provider.dart';
 
 class RegisterPaymentScreen extends StatefulWidget {
-  final String accountId;
+  final String invoiceAccountId;
   
-  const RegisterPaymentScreen({super.key, required this.accountId});
+  const RegisterPaymentScreen({super.key, required this.invoiceAccountId});
 
   @override
   State<RegisterPaymentScreen> createState() => _RegisterPaymentScreenState();
@@ -35,8 +35,8 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
   
   @override
   Widget build(BuildContext context) {
-    final accountProvider = Provider.of<AccountProvider>(context);
-    final account = accountProvider.getAccountById(widget.accountId);
+    final invoiceAccountProvider = Provider.of<InvoiceAccountProvider>(context);
+    final invoiceAccount = invoiceAccountProvider.getInvoiceAccountById(widget.invoiceAccountId);
     
     final currencyFormat = NumberFormat.currency(
       locale: 'es_PE',
@@ -46,7 +46,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
     
     // Inicializar el monto con el monto pendiente si no se ha inicializado aún
     if (_amountController.text.isEmpty) {
-      _amountController.text = account.remainingAmount.toStringAsFixed(2);
+      _amountController.text = invoiceAccount.remainingAmount.toStringAsFixed(2);
     }
     
     return Scaffold(
@@ -54,7 +54,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
         title: const Text('Registrar Pago'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/account-detail/${widget.accountId}'),
+          onPressed: () => context.go('/invoice-account-detail/${widget.invoiceAccountId}'),
         ),
       ),
       body: SingleChildScrollView(
@@ -64,7 +64,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Información de la cuenta
+              // Información de la factura
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(
@@ -76,7 +76,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        account.customer.commercialName,
+                        invoiceAccount.customer.commercialName,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
@@ -84,7 +84,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        account.concept,
+                        invoiceAccount.concept,
                         style: TextStyle(
                           color: Colors.grey[600],
                         ),
@@ -104,7 +104,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                                 ),
                               ),
                               Text(
-                                currencyFormat.format(account.totalAmount),
+                                currencyFormat.format(invoiceAccount.totalAmount),
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -122,7 +122,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                                 ),
                               ),
                               Text(
-                                currencyFormat.format(account.remainingAmount),
+                                currencyFormat.format(invoiceAccount.remainingAmount),
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: Colors.orange,
@@ -183,7 +183,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                           return 'El monto debe ser mayor a 0';
                         }
                         
-                        if (amount > account.remainingAmount) {
+                        if (amount > invoiceAccount.remainingAmount) {
                           return 'El monto no puede ser mayor al pendiente';
                         }
                         
@@ -203,7 +203,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                   ElevatedButton(
                     onPressed: () {
                       setState(() {
-                        _amountController.text = account.remainingAmount.toStringAsFixed(2);
+                        _amountController.text = invoiceAccount.remainingAmount.toStringAsFixed(2);
                         
                         // Actualizar el vuelto si el método es efectivo
                         if (_selectedMethod == PaymentMethod.cash) {
@@ -346,7 +346,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    _registerPayment(context, account);
+                    _registerPayment(context, invoiceAccount);
                   },
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -453,15 +453,15 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
     });
   }
   
-  void _registerPayment(BuildContext context, Account account) {
+  void _registerPayment(BuildContext context, InvoiceAccount invoiceAccount) {
     if (_formKey.currentState!.validate()) {
       final amount = double.parse(_amountController.text);
-      final accountProvider = Provider.of<AccountProvider>(context, listen: false);
+      final invoiceAccountProvider = Provider.of<InvoiceAccountProvider>(context, listen: false);
       
       // Crear objeto de pago según el método
       final payment = Payment(
         id: 'p${DateTime.now().millisecondsSinceEpoch}',
-        accountId: account.id,
+        invoiceAccountId: invoiceAccount.id,
         amount: amount,
         date: DateTime.now(),
         method: _selectedMethod,
@@ -475,7 +475,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
       );
       
       // Registrar el pago
-      accountProvider.addPayment(account.id, payment);
+      invoiceAccountProvider.addPayment(invoiceAccount.id, payment);
       
       // Mostrar mensaje de éxito
       ScaffoldMessenger.of(context).showSnackBar(

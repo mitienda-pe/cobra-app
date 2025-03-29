@@ -31,14 +31,14 @@ class Contact {
   });
 }
 
-enum AccountStatus {
+enum InvoiceAccountStatus {
   pending,
   partiallyPaid,
   paid,
   expired,
 }
 
-class Account {
+class InvoiceAccount {
   final String id;
   final Customer customer;
   final String concept;
@@ -46,10 +46,10 @@ class Account {
   final DateTime expirationDate;
   final double totalAmount;
   final double paidAmount;
-  final AccountStatus status;
+  final InvoiceAccountStatus status;
   final List<Payment> payments;
 
-  Account({
+  InvoiceAccount({
     required this.id,
     required this.customer,
     required this.concept,
@@ -57,7 +57,7 @@ class Account {
     required this.expirationDate,
     required this.totalAmount,
     this.paidAmount = 0.0,
-    this.status = AccountStatus.pending,
+    this.status = InvoiceAccountStatus.pending,
     this.payments = const [],
   });
 

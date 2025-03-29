@@ -7,7 +7,7 @@ enum PaymentMethod {
 
 class Payment {
   final String id;
-  final String accountId;
+  final String invoiceAccountId;
   final double amount;
   final DateTime date;
   final PaymentMethod method;
@@ -18,7 +18,7 @@ class Payment {
 
   Payment({
     required this.id,
-    required this.accountId,
+    required this.invoiceAccountId,
     required this.amount,
     required this.date,
     required this.method,

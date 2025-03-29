@@ -40,6 +40,13 @@ class AuthProvider with ChangeNotifier {
           _isAuthenticated = true;
           // Obtener datos adicionales del usuario
           await _fetchUserData();
+          
+          // Configurar el token en el ApiService
+          final authToken = await _authService.getToken();
+          if (authToken != null) {
+            _apiService.setAuthToken(authToken.accessToken);
+          }
+          
           notifyListeners();
         } else {
           // Si tenemos token pero no usuario, intentamos obtener los datos del usuario

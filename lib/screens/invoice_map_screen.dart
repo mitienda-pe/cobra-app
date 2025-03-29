@@ -4,8 +4,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
-import '../models/account.dart';
-import '../providers/account_provider.dart';
+import '../models/invoice_account.dart';
+import '../providers/invoice_account_provider.dart';
+import '../providers/auth_provider.dart';
 
 enum SortOption {
   status,
@@ -14,16 +15,16 @@ enum SortOption {
   distance,
 }
 
-class AccountMapScreen extends StatefulWidget {
-  const AccountMapScreen({super.key});
+class InvoiceMapScreen extends StatefulWidget {
+  const InvoiceMapScreen({super.key});
 
   @override
-  State<AccountMapScreen> createState() => _AccountMapScreenState();
+  State<InvoiceMapScreen> createState() => _InvoiceMapScreenState();
 }
 
-class _AccountMapScreenState extends State<AccountMapScreen> {
+class _InvoiceMapScreenState extends State<InvoiceMapScreen> {
   final MapController _mapController = MapController();
-  AccountStatus? _selectedStatus;
+  InvoiceAccountStatus? _selectedStatus;
   SortOption _sortOption = SortOption.distance;
   bool _hidePaidAccounts = false;
   Position? _currentPosition;
@@ -32,6 +33,11 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
   void initState() {
     super.initState();
     _determinePosition();
+    
+    // Cargar las facturas al iniciar la pantalla
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _reloadInvoicesWithFilters();
+    });
   }
 
   Future<void> _determinePosition() async {
@@ -78,10 +84,14 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mapa de Cobranzas'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/accounts'),
+        title: const Text('Mapa de Facturas'),
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () {
+              Scaffold.of(context).openDrawer();
+            },
+          ),
         ),
         actions: [
           IconButton(
@@ -98,24 +108,118 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
           ),
         ],
       ),
-      body: Consumer<AccountProvider>(
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            Consumer<AuthProvider>(
+              builder: (context, authProvider, child) {
+                final userData = authProvider.userData;
+                final userName = userData != null && userData.containsKey('name') 
+                    ? userData['name'] 
+                    : 'Usuario';
+                final userEmail = userData != null && userData.containsKey('email') 
+                    ? userData['email'] 
+                    : authProvider.phoneNumber;
+                
+                return UserAccountsDrawerHeader(
+                  accountName: Text(userName),
+                  accountEmail: Text(userEmail),
+                  currentAccountPicture: CircleAvatar(
+                    backgroundColor: Colors.white,
+                    child: Text(
+                      userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                      style: const TextStyle(fontSize: 40.0),
+                    ),
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor,
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.receipt),
+              title: const Text('Facturas'),
+              onTap: () {
+                Navigator.pop(context); // Cerrar el drawer
+                GoRouter.of(context).go('/invoices');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.map),
+              title: const Text('Mapa de Facturas'),
+              selected: true,
+              onTap: () {
+                Navigator.pop(context); // Cerrar el drawer
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Perfil'),
+              onTap: () {
+                Navigator.pop(context); // Cerrar el drawer
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Función de perfil en desarrollo'),
+                  ),
+                );
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.exit_to_app),
+              title: const Text('Cerrar Sesión'),
+              onTap: () async {
+                // Mostrar diálogo de confirmación
+                final shouldLogout = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Cerrar Sesión'),
+                    content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancelar'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Cerrar Sesión'),
+                      ),
+                    ],
+                  ),
+                ) ?? false;
+                
+                if (shouldLogout) {
+                  Navigator.pop(context); // Cerrar el drawer
+                  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                  await authProvider.logout();
+                  // La redirección a la pantalla de login se manejará automáticamente
+                  // a través del redirect configurado en el GoRouter
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+      body: Consumer<InvoiceAccountProvider>(
         builder: (context, accountProvider, child) {
-          final accounts = accountProvider.accounts;
+          final accounts = accountProvider.invoiceAccounts;
           
           // Filtrar cuentas por estado si hay un filtro seleccionado
-          List<Account> filteredAccounts = List<Account>.from(accounts);
+          List<InvoiceAccount> filteredAccounts = List<InvoiceAccount>.from(accounts);
           
           // Ocultar cuentas pagadas si la opción está activada
           if (_hidePaidAccounts) {
             filteredAccounts = filteredAccounts.where((account) => 
-              account.status != AccountStatus.paid
+              account.status != InvoiceAccountStatus.paid
             ).toList();
           }
           
           if (_selectedStatus != null) {
             filteredAccounts = filteredAccounts.where((account) {
-              if (_selectedStatus == AccountStatus.expired) {
-                return account.isExpired && account.status != AccountStatus.paid;
+              if (_selectedStatus == InvoiceAccountStatus.expired) {
+                return account.isExpired && account.status != InvoiceAccountStatus.paid;
               }
               return account.status == _selectedStatus;
             }).toList();
@@ -134,7 +238,7 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('No hay cuentas con ubicación disponible'),
+                  const Text('No hay facturas con ubicación disponible'),
                   if (_selectedStatus != null || _hidePaidAccounts) ...[
                     const SizedBox(height: 16),
                     ElevatedButton(
@@ -153,19 +257,28 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
           }
           
           // Calcular el centro del mapa basado en todas las ubicaciones
-          final allLocations = accountsWithLocation
-              .map((account) => account.customer.contact.location!)
-              .toList();
+          LatLng center;
           
-          final centerLat = allLocations
-              .map((loc) => loc.latitude)
-              .reduce((a, b) => a + b) / allLocations.length;
-          
-          final centerLng = allLocations
-              .map((loc) => loc.longitude)
-              .reduce((a, b) => a + b) / allLocations.length;
-          
-          final center = LatLng(centerLat, centerLng);
+          if (accountsWithLocation.isNotEmpty) {
+            final allLocations = accountsWithLocation
+                .map((account) => account.customer.contact.location!)
+                .toList();
+            
+            final centerLat = allLocations
+                .map((loc) => loc.latitude)
+                .reduce((a, b) => a + b) / allLocations.length;
+            
+            final centerLng = allLocations
+                .map((loc) => loc.longitude)
+                .reduce((a, b) => a + b) / allLocations.length;
+            
+            center = LatLng(centerLat, centerLng);
+          } else if (_currentPosition != null) {
+            center = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
+          } else {
+            // Coordenadas por defecto (Lima, Perú)
+            center = LatLng(-12.0464, -77.0428);
+          }
           
           return Stack(
             children: [
@@ -181,19 +294,35 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
                     userAgentPackageName: 'com.example.cobra_app',
                   ),
                   MarkerLayer(
-                    markers: accountsWithLocation.map((account) {
-                      return Marker(
-                        width: 40.0,
-                        height: 40.0,
-                        point: account.customer.contact.location!,
-                        child: GestureDetector(
-                          onTap: () {
-                            _showAccountInfo(context, account);
-                          },
-                          child: _buildMarkerIcon(account),
+                    markers: [
+                      // Marcador para la posición actual
+                      if (_currentPosition != null)
+                        Marker(
+                          width: 40.0,
+                          height: 40.0,
+                          point: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+                          child: const Icon(
+                            Icons.my_location,
+                            color: Colors.blue,
+                            size: 30,
+                          ),
                         ),
-                      );
-                    }).toList(),
+                      
+                      // Marcadores para las cuentas con ubicación
+                      ...accountsWithLocation.map((account) {
+                        return Marker(
+                          width: 40.0,
+                          height: 40.0,
+                          point: account.customer.contact.location!,
+                          child: GestureDetector(
+                            onTap: () {
+                              _showAccountInfo(context, account);
+                            },
+                            child: _buildMarkerIcon(account),
+                          ),
+                        );
+                      }).toList(),
+                    ],
                   ),
                 ],
               ),
@@ -210,7 +339,7 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
                       children: [
                         Row(
                           children: [
-                            Text('${accountsWithLocation.length} cuentas en el mapa'),
+                            Text('${accountsWithLocation.length} facturas en el mapa'),
                             const Spacer(),
                             Text('Ordenado por: ${_getSortText()}'),
                           ],
@@ -262,27 +391,46 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          context.go('/accounts');
-        },
-        child: const Icon(Icons.list),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            heroTag: 'locate',
+            onPressed: () {
+              if (_currentPosition != null) {
+                _mapController.move(
+                  LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+                  15.0,
+                );
+              }
+            },
+            child: const Icon(Icons.my_location),
+          ),
+          const SizedBox(height: 16),
+          FloatingActionButton(
+            heroTag: 'list',
+            onPressed: () {
+              context.go('/invoices');
+            },
+            child: const Icon(Icons.list),
+          ),
+        ],
       ),
     );
   }
   
-  void _sortAccounts(List<Account> accounts) {
+  void _sortAccounts(List<InvoiceAccount> accounts) {
     switch (_sortOption) {
       case SortOption.status:
         accounts.sort((a, b) {
           // Orden: Vencido > Pendiente > Pago Parcial > Pagado
-          int getStatusPriority(Account account) {
-            if (account.isExpired && account.status != AccountStatus.paid) return 0;
+          int getStatusPriority(InvoiceAccount account) {
+            if (account.isExpired && account.status != InvoiceAccountStatus.paid) return 0;
             switch (account.status) {
-              case AccountStatus.pending: return 1;
-              case AccountStatus.partiallyPaid: return 2;
-              case AccountStatus.paid: return 3;
-              case AccountStatus.expired: return 0;
+              case InvoiceAccountStatus.pending: return 1;
+              case InvoiceAccountStatus.partiallyPaid: return 2;
+              case InvoiceAccountStatus.paid: return 3;
+              case InvoiceAccountStatus.expired: return 0;
             }
           }
           return getStatusPriority(a).compareTo(getStatusPriority(b));
@@ -348,20 +496,20 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
     }
   }
   
-  Widget _buildMarkerIcon(Account account) {
+  Widget _buildMarkerIcon(InvoiceAccount account) {
     Color markerColor;
     
     switch (account.status) {
-      case AccountStatus.paid:
+      case InvoiceAccountStatus.paid:
         markerColor = Colors.green;
         break;
-      case AccountStatus.partiallyPaid:
+      case InvoiceAccountStatus.partiallyPaid:
         markerColor = Colors.orange;
         break;
-      case AccountStatus.expired:
+      case InvoiceAccountStatus.expired:
         markerColor = Colors.red;
         break;
-      case AccountStatus.pending:
+      case InvoiceAccountStatus.pending:
         markerColor = account.isExpired ? Colors.red : Colors.blue;
         break;
     }
@@ -390,7 +538,7 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
     );
   }
   
-  void _showAccountInfo(BuildContext context, Account account) {
+  void _showAccountInfo(BuildContext context, InvoiceAccount account) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -453,7 +601,7 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
                 child: ElevatedButton(
                   onPressed: () {
                     Navigator.pop(context);
-                    context.go('/account-detail/${account.id}');
+                    context.go('/invoice-detail/${account.id}');
                   },
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -471,28 +619,28 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
     );
   }
   
-  String _getStatusText(AccountStatus status) {
+  String _getStatusText(InvoiceAccountStatus status) {
     switch (status) {
-      case AccountStatus.paid:
+      case InvoiceAccountStatus.paid:
         return 'Pagado';
-      case AccountStatus.partiallyPaid:
+      case InvoiceAccountStatus.partiallyPaid:
         return 'Pago Parcial';
-      case AccountStatus.expired:
+      case InvoiceAccountStatus.expired:
         return 'Vencido';
-      case AccountStatus.pending:
+      case InvoiceAccountStatus.pending:
         return 'Pendiente';
     }
   }
   
-  Color _getStatusColor(AccountStatus status) {
+  Color _getStatusColor(InvoiceAccountStatus status) {
     switch (status) {
-      case AccountStatus.paid:
+      case InvoiceAccountStatus.paid:
         return Colors.green;
-      case AccountStatus.partiallyPaid:
+      case InvoiceAccountStatus.partiallyPaid:
         return Colors.orange;
-      case AccountStatus.expired:
+      case InvoiceAccountStatus.expired:
         return Colors.red;
-      case AccountStatus.pending:
+      case InvoiceAccountStatus.pending:
         return Colors.blue;
     }
   }
@@ -501,39 +649,59 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Filtrar Cuentas'),
+        title: const Text('Filtrar Facturas'),
         content: StatefulBuilder(
           builder: (context, setStateDialog) {
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Estado:', style: TextStyle(fontWeight: FontWeight.bold)),
-                _buildFilterOption(context, null, 'Todos'),
-                _buildFilterOption(context, AccountStatus.pending, 'Pendientes'),
-                _buildFilterOption(context, AccountStatus.partiallyPaid, 'Pago Parcial'),
-                _buildFilterOption(context, AccountStatus.paid, 'Pagados'),
-                _buildFilterOption(context, AccountStatus.expired, 'Vencidos'),
-                const Divider(),
-                SwitchListTile(
-                  title: const Text('Ocultar cuentas pagadas'),
-                  value: _hidePaidAccounts,
-                  onChanged: (value) {
-                    setStateDialog(() {
-                      setState(() {
-                        _hidePaidAccounts = value;
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Estado:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  _buildFilterOption(context, null, 'Todos'),
+                  _buildFilterOption(context, InvoiceAccountStatus.pending, 'Pendientes'),
+                  _buildFilterOption(context, InvoiceAccountStatus.partiallyPaid, 'Pago Parcial'),
+                  _buildFilterOption(context, InvoiceAccountStatus.paid, 'Pagados'),
+                  _buildFilterOption(context, InvoiceAccountStatus.expired, 'Vencidos'),
+                  const Divider(),
+                  SwitchListTile(
+                    title: const Text('Ocultar facturas pagadas'),
+                    value: _hidePaidAccounts,
+                    onChanged: (value) {
+                      setStateDialog(() {
+                        setState(() {
+                          _hidePaidAccounts = value;
+                        });
                       });
-                    });
-                  },
-                ),
-              ],
+                    },
+                  ),
+                ],
+              ),
             );
-          }
+          },
         ),
         actions: [
           TextButton(
+            onPressed: () {
+              setState(() {
+                _selectedStatus = null;
+                _hidePaidAccounts = false;
+              });
+              Navigator.of(context).pop();
+              _reloadInvoicesWithFilters();
+            },
+            child: const Text('Limpiar'),
+          ),
+          TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cerrar'),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _reloadInvoicesWithFilters();
+            },
+            child: const Text('Aplicar'),
           ),
         ],
       ),
@@ -557,31 +725,36 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cerrar'),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              setState(() {}); // Forzar reconstrucción
+            },
+            child: const Text('Aplicar'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildFilterOption(BuildContext context, AccountStatus? status, String label) {
+  Widget _buildFilterOption(BuildContext context, InvoiceAccountStatus? status, String label) {
     return ListTile(
       title: Text(label),
-      leading: Radio<AccountStatus?>(
+      leading: Radio<InvoiceAccountStatus?>(
         value: status,
         groupValue: _selectedStatus,
         onChanged: (value) {
           setState(() {
             _selectedStatus = value;
           });
-          Navigator.of(context).pop();
         },
       ),
       onTap: () {
         setState(() {
           _selectedStatus = status;
         });
-        Navigator.of(context).pop();
       },
     );
   }
@@ -596,15 +769,41 @@ class _AccountMapScreenState extends State<AccountMapScreen> {
           setState(() {
             _sortOption = value!;
           });
-          Navigator.of(context).pop();
         },
       ),
       onTap: () {
         setState(() {
           _sortOption = option;
         });
-        Navigator.of(context).pop();
       },
+    );
+  }
+
+  // Método para recargar las facturas con los filtros aplicados
+  Future<void> _reloadInvoicesWithFilters() async {
+    final accountProvider = Provider.of<InvoiceAccountProvider>(context, listen: false);
+    
+    // Convertir el estado seleccionado al formato esperado por la API
+    String? apiStatus;
+    if (_selectedStatus != null) {
+      switch (_selectedStatus!) {
+        case InvoiceAccountStatus.pending:
+          apiStatus = 'pending';
+          break;
+        case InvoiceAccountStatus.partiallyPaid:
+          apiStatus = 'partial';
+          break;
+        case InvoiceAccountStatus.paid:
+          apiStatus = 'paid';
+          break;
+        case InvoiceAccountStatus.expired:
+          apiStatus = 'expired';
+          break;
+      }
+    }
+    
+    await accountProvider.loadInvoiceAccounts(
+      status: apiStatus,
     );
   }
 }

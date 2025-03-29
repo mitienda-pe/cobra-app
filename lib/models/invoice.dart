@@ -1,10 +1,11 @@
 import 'package:intl/intl.dart';
+import 'client.dart';
 
 class Invoice {
   final int id;
   final int clientId;
-  final String clientName;
-  final String documentNumber;
+  final String? clientName;
+  final String? documentNumber;
   final String invoiceNumber;
   final String concept;
   final double amount;
@@ -15,6 +16,12 @@ class Invoice {
   final int organizationId;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? uuid;
+  final String? currency;
+  final String? deletedAt;
+  final Client? client;
+  
+  // Campos que pueden no estar en la respuesta de la API
   final int paymentsCount;
   final double paymentsAmount;
   final int daysOverdue;
@@ -22,8 +29,8 @@ class Invoice {
   Invoice({
     required this.id,
     required this.clientId,
-    required this.clientName,
-    required this.documentNumber,
+    this.clientName,
+    this.documentNumber,
     required this.invoiceNumber,
     required this.concept,
     required this.amount,
@@ -34,9 +41,13 @@ class Invoice {
     required this.organizationId,
     required this.createdAt,
     required this.updatedAt,
-    required this.paymentsCount,
-    required this.paymentsAmount,
-    required this.daysOverdue,
+    this.uuid,
+    this.currency,
+    this.deletedAt,
+    this.client,
+    this.paymentsCount = 0,
+    this.paymentsAmount = 0,
+    this.daysOverdue = 0,
   });
 
   double get remainingAmount => amount - paymentsAmount;
@@ -50,53 +61,93 @@ class Invoice {
 
   factory Invoice.fromJson(Map<String, dynamic> json) {
     final dateFormat = DateFormat('yyyy-MM-dd');
-    final dateTimeFormat = DateFormat('yyyy-MM-ddTHH:mm:ssZ');
+    
+    // Manejar diferentes formatos de fecha/hora
+    DateTime parseDateTime(String? dateTimeStr) {
+      if (dateTimeStr == null) return DateTime.now();
+      
+      try {
+        // Intentar con formato ISO
+        return DateTime.parse(dateTimeStr);
+      } catch (_) {
+        try {
+          // Intentar con formato yyyy-MM-dd HH:mm:ss
+          return DateFormat('yyyy-MM-dd HH:mm:ss').parse(dateTimeStr);
+        } catch (_) {
+          // Si todo falla, devolver la fecha actual
+          return DateTime.now();
+        }
+      }
+    }
+    
+    // Convertir valor a double
+    double parseAmount(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is int) return value.toDouble();
+      if (value is double) return value;
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
+    }
+    
+    // Parsear el cliente si está presente en la respuesta
+    Client? client;
+    if (json['client'] != null) {
+      client = Client.fromJson(json['client']);
+    }
     
     return Invoice(
-      id: json['id'],
-      clientId: json['client_id'],
+      id: json['id'] ?? 0,
+      clientId: json['client_id'] ?? 0,
       clientName: json['client_name'],
       documentNumber: json['document_number'],
-      invoiceNumber: json['invoice_number'],
-      concept: json['concept'],
-      amount: (json['amount'] is int) 
-          ? (json['amount'] as int).toDouble() 
-          : json['amount'],
-      dueDate: dateFormat.parse(json['due_date']),
-      status: json['status'],
+      invoiceNumber: json['invoice_number'] ?? '',
+      concept: json['concept'] ?? '',
+      amount: parseAmount(json['amount']),
+      dueDate: json['due_date'] != null ? dateFormat.parse(json['due_date']) : DateTime.now(),
+      status: json['status'] ?? 'pending',
       externalId: json['external_id'],
       notes: json['notes'],
-      organizationId: json['organization_id'],
-      createdAt: dateTimeFormat.parse(json['created_at']),
-      updatedAt: dateTimeFormat.parse(json['updated_at']),
-      paymentsCount: json['payments_count'],
-      paymentsAmount: (json['payments_amount'] is int) 
-          ? (json['payments_amount'] as int).toDouble() 
-          : json['payments_amount'],
-      daysOverdue: json['days_overdue'],
+      organizationId: json['organization_id'] ?? 0,
+      createdAt: parseDateTime(json['created_at']),
+      updatedAt: parseDateTime(json['updated_at']),
+      uuid: json['uuid'],
+      currency: json['currency'],
+      deletedAt: json['deleted_at'],
+      client: client,
+      paymentsCount: json['payments_count'] ?? 0,
+      paymentsAmount: parseAmount(json['payments_amount']),
+      daysOverdue: json['days_overdue'] ?? 0,
     );
   }
 }
 
 class InvoiceResponse {
-  final bool success;
   final List<Invoice> invoices;
-  final Pagination pagination;
+  final Pagination? pagination;
 
   InvoiceResponse({
-    required this.success,
     required this.invoices,
-    required this.pagination,
+    this.pagination,
   });
 
   factory InvoiceResponse.fromJson(Map<String, dynamic> json) {
-    return InvoiceResponse(
-      success: json['success'],
-      invoices: (json['invoices'] as List)
-          .map((invoice) => Invoice.fromJson(invoice))
-          .toList(),
-      pagination: Pagination.fromJson(json['pagination']),
-    );
+    // Verificar si la respuesta contiene el campo 'invoices'
+    if (json.containsKey('invoices')) {
+      return InvoiceResponse(
+        invoices: (json['invoices'] as List)
+            .map((invoice) => Invoice.fromJson(invoice))
+            .toList(),
+        pagination: json.containsKey('pagination') 
+            ? Pagination.fromJson(json['pagination']) 
+            : null,
+      );
+    } else {
+      // Si no hay campo 'invoices', devolver una lista vacía
+      return InvoiceResponse(
+        invoices: [],
+        pagination: null,
+      );
+    }
   }
 }
 

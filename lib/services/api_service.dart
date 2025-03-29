@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import '../models/auth_token.dart';
 import '../models/invoice.dart';
+import '../models/client.dart';
 import 'api_client.dart';
 import 'mock_service.dart';
 import 'package:dio/dio.dart';
@@ -382,11 +383,15 @@ class ApiService {
   // Método para obtener facturas (invoices) de la cartera del usuario
   Future<InvoiceResponse?> getInvoices({
     int? clientId,
+    String? clientUuid,
     int? portfolioId,
     String? status,
     String? search,
+    String? dateStart,
+    String? dateEnd,
     int page = 1,
     int limit = 20,
+    bool includeClients = false,
   }) async {
     try {
       // En modo desarrollo, usar servicio simulado
@@ -397,7 +402,7 @@ class ApiService {
 
       // Obtener el token actual de los headers
       String? token = getCurrentToken();
-
+      
       if (token == null || token.isEmpty) {
         if (kDebugMode) {
           print('No hay token de autenticación disponible para obtener facturas');
@@ -409,41 +414,65 @@ class ApiService {
       final Map<String, dynamic> queryParams = {
         'page': page.toString(),
         'limit': limit.toString(),
-        'token': token, // Añadir el token como parámetro de consulta para mayor seguridad
       };
 
       // Añadir parámetros opcionales si están presentes
       if (clientId != null) queryParams['client_id'] = clientId.toString();
+      if (clientUuid != null) queryParams['client_uuid'] = clientUuid;
       if (portfolioId != null) queryParams['portfolio_id'] = portfolioId.toString();
       if (status != null) queryParams['status'] = status;
       if (search != null) queryParams['search'] = search;
+      if (dateStart != null) queryParams['date_start'] = dateStart;
+      if (dateEnd != null) queryParams['date_end'] = dateEnd;
+      if (includeClients) queryParams['include_clients'] = 'true';
 
-      // Realizar la solicitud a la API
-      final response = await _apiClient.dio.get(
-        '/index.php/api/invoices',
-        queryParameters: queryParams,
-      );
+      // Realizar la solicitud a la API con la nueva ruta
+      try {
+        final response = await _apiClient.dio.get(
+          '/index.php/api/invoices',
+          queryParameters: queryParams,
+          options: Options(
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          ),
+        );
+        
+        if (kDebugMode) {
+          print('Respuesta completa de invoices: ${response.toString()}');
+        }
 
-      if (response.statusCode == 200) {
-        // Verificar si la respuesta sigue el nuevo formato con status, message y data
-        if (response.data is Map && 
-            response.data.containsKey('status') && 
-            response.data['status'] == 'success' &&
-            response.data.containsKey('data')) {
-          
-          // Si la respuesta tiene el nuevo formato, extraer los datos
-          final data = response.data['data'];
-          return InvoiceResponse.fromJson(data);
-        } else {
-          // Si la respuesta tiene el formato anterior
-          return InvoiceResponse.fromJson(response.data);
+        if (response.statusCode == 200) {
+          // Verificar si la respuesta sigue el nuevo formato con status, message y data
+          if (response.data is Map && 
+              response.data.containsKey('status') && 
+              response.data['status'] == 'success' &&
+              response.data.containsKey('data')) {
+            
+            // Si la respuesta tiene el nuevo formato, extraer los datos
+            final data = response.data['data'];
+            return InvoiceResponse.fromJson(data);
+          } else {
+            // Si la respuesta tiene el formato anterior
+            return InvoiceResponse.fromJson(response.data);
+          }
+        }
+      } catch (apiError) {
+        if (kDebugMode) {
+          print('Error al obtener facturas: $apiError');
+          if (apiError is DioException && apiError.response != null) {
+            print('Código de estado: ${apiError.response?.statusCode}');
+            print('Datos de respuesta: ${apiError.response?.data}');
+          }
         }
       }
 
       return null;
     } catch (e) {
       if (kDebugMode) {
-        print('Error en getInvoices: $e');
+        print('Error general en getInvoices: $e');
         if (e is DioException && e.response != null) {
           print('Código de estado: ${e.response?.statusCode}');
           print('Datos de respuesta: ${e.response?.data}');
@@ -472,31 +501,51 @@ class ApiService {
         return null;
       }
 
-      // Realizar la solicitud a la API
-      final response = await _apiClient.dio.get(
-        '/index.php/api/invoices/$invoiceId',
-        queryParameters: {'token': token}, // Añadir el token como parámetro de consulta
-      );
+      // Realizar la solicitud a la API con la ruta actualizada
+      try {
+        final response = await _apiClient.dio.get(
+          '/index.php/api/invoices/$invoiceId',
+          options: Options(
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          ),
+        );
+        
+        if (kDebugMode) {
+          print('Respuesta completa de invoice por ID: ${response.toString()}');
+        }
 
-      if (response.statusCode == 200) {
-        // Verificar si la respuesta sigue el nuevo formato con status, message y data
-        if (response.data is Map && 
-            response.data.containsKey('status') && 
-            response.data['status'] == 'success' &&
-            response.data.containsKey('data')) {
-          
-          // Si la respuesta tiene el nuevo formato, extraer los datos
-          return response.data['data'];
-        } else {
-          // Si la respuesta tiene el formato anterior
-          return response.data;
+        if (response.statusCode == 200) {
+          // Verificar si la respuesta sigue el nuevo formato con status, message y data
+          if (response.data is Map && 
+              response.data.containsKey('status') && 
+              response.data['status'] == 'success' &&
+              response.data.containsKey('data')) {
+            
+            // Si la respuesta tiene el nuevo formato, extraer los datos
+            return response.data['data'];
+          } else {
+            // Si la respuesta tiene el formato anterior
+            return response.data;
+          }
+        }
+      } catch (apiError) {
+        if (kDebugMode) {
+          print('Error al obtener factura por ID: $apiError');
+          if (apiError is DioException && apiError.response != null) {
+            print('Código de estado: ${apiError.response?.statusCode}');
+            print('Datos de respuesta: ${apiError.response?.data}');
+          }
         }
       }
 
       return null;
     } catch (e) {
       if (kDebugMode) {
-        print('Error en getInvoiceById: $e');
+        print('Error general en getInvoiceById: $e');
         if (e is DioException && e.response != null) {
           print('Código de estado: ${e.response?.statusCode}');
           print('Datos de respuesta: ${e.response?.data}');
@@ -504,5 +553,92 @@ class ApiService {
       }
       return null;
     }
+  }
+
+  // Método para obtener las facturas del usuario
+  Future<InvoiceResponse?> getInvoicesFromUser({
+    String? status, 
+    String? dateStart, 
+    String? dateEnd,
+    bool includeClients = false
+  }) async {
+    try {
+      Map<String, dynamic> queryParams = {};
+      
+      if (status != null && status.isNotEmpty) {
+        queryParams['status'] = status;
+      }
+      
+      if (dateStart != null && dateStart.isNotEmpty) {
+        queryParams['date_start'] = dateStart;
+      }
+      
+      if (dateEnd != null && dateEnd.isNotEmpty) {
+        queryParams['date_end'] = dateEnd;
+      }
+      
+      if (includeClients) {
+        queryParams['include_clients'] = 'true';
+      }
+      
+      final response = await _apiClient.dio.get('/index.php/api/invoices', queryParameters: queryParams);
+      
+      if (response.statusCode == 200) {
+        return InvoiceResponse.fromJson(response.data);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error al obtener facturas: $e');
+      }
+    }
+    
+    return null;
+  }
+
+  // Método para obtener los clientes del usuario
+  Future<ClientResponse?> getClients({int? portfolioId, String? search, int page = 1, int limit = 20}) async {
+    try {
+      Map<String, dynamic> queryParams = {
+        'page': page,
+        'limit': limit
+      };
+      
+      if (portfolioId != null) {
+        queryParams['portfolio_id'] = portfolioId;
+      }
+      
+      if (search != null && search.isNotEmpty) {
+        queryParams['search'] = search;
+      }
+      
+      final response = await _apiClient.dio.get('/index.php/api/clients', queryParameters: queryParams);
+      
+      if (response.statusCode == 200) {
+        return ClientResponse.fromJson(response.data);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error al obtener clientes: $e');
+      }
+    }
+    
+    return null;
+  }
+
+  // Método para obtener un cliente específico por su ID
+  Future<Client?> getClientById(int clientId) async {
+    try {
+      final response = await _apiClient.dio.get('/index.php/api/clients/$clientId');
+      
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        return Client.fromJson(response.data['client']);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error al obtener cliente por ID: $e');
+      }
+    }
+    
+    return null;
   }
 }

@@ -1,38 +1,38 @@
 import 'package:flutter/foundation.dart';
-import '../models/account.dart';
+import '../models/invoice_account.dart';
 import '../models/payment.dart';
 import '../models/invoice.dart';
 import '../models/client.dart' as client_model;
 import '../services/api_service.dart';
 import 'client_provider.dart';
 
-class AccountProvider with ChangeNotifier {
+class InvoiceAccountProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
   final ClientProvider _clientProvider = ClientProvider();
-  List<Account> _accounts = [];
+  List<InvoiceAccount> _invoiceAccounts = [];
   bool _isLoading = false;
   String? _errorMessage;
   
-  List<Account> get accounts => _accounts;
+  List<InvoiceAccount> get invoiceAccounts => _invoiceAccounts;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   
-  List<Account> get pendingAccounts => _accounts
+  List<InvoiceAccount> get pendingInvoiceAccounts => _invoiceAccounts
       .where((account) => 
-          account.status == AccountStatus.pending || 
-          account.status == AccountStatus.partiallyPaid)
+          account.status == InvoiceAccountStatus.pending || 
+          account.status == InvoiceAccountStatus.partiallyPaid)
       .toList();
   
-  List<Account> get expiredAccounts => _accounts
-      .where((account) => account.isExpired && account.status != AccountStatus.paid)
+  List<InvoiceAccount> get expiredInvoiceAccounts => _invoiceAccounts
+      .where((account) => account.isExpired && account.status != InvoiceAccountStatus.paid)
       .toList();
   
-  AccountProvider() {
+  InvoiceAccountProvider() {
     // No cargar cuentas automáticamente al iniciar
     // Se cargarán después de la autenticación
   }
   
-  Future<void> loadAccounts({String? status, String? dateStart, String? dateEnd}) async {
+  Future<void> loadInvoiceAccounts({String? status, String? dateStart, String? dateEnd}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -57,7 +57,7 @@ class AccountProvider with ChangeNotifier {
       
       if (invoiceResponse != null) {
         // Convertir las facturas a cuentas
-        _accounts = await _convertInvoicesToAccounts(invoiceResponse.invoices);
+        _invoiceAccounts = await _convertInvoicesToAccounts(invoiceResponse.invoices);
         _isLoading = false;
         _errorMessage = null;
         notifyListeners();
@@ -76,23 +76,19 @@ class AccountProvider with ChangeNotifier {
     }
   }
   
-  Future<List<Account>> _convertInvoicesToAccounts(List<Invoice> invoices) async {
-    List<Account> accounts = [];
-    
-    // Primero, cargar los clientes para tener la información disponible
-    await _clientProvider.loadClients();
+  Future<List<InvoiceAccount>> _convertInvoicesToAccounts(List<Invoice> invoices) async {
+    List<InvoiceAccount> accounts = [];
     
     for (var invoice in invoices) {
-      // Determinar el estado de la cuenta basado en los datos de la factura
-      AccountStatus status;
-      if (invoice.isPaid) {
-        status = AccountStatus.paid;
-      } else if (invoice.isExpired) {
-        status = AccountStatus.expired;
+      // Determinar el estado de la cuenta
+      InvoiceAccountStatus status;
+      
+      if (invoice.status == 'paid') {
+        status = InvoiceAccountStatus.paid;
       } else if (invoice.paymentsAmount > 0) {
-        status = AccountStatus.partiallyPaid;
+        status = InvoiceAccountStatus.partiallyPaid;
       } else {
-        status = AccountStatus.pending;
+        status = InvoiceAccountStatus.pending;
       }
       
       // Crear un objeto Customer a partir de los datos del cliente
@@ -148,8 +144,8 @@ class AccountProvider with ChangeNotifier {
         }
       }
       
-      // Crear un objeto Account a partir de la factura
-      accounts.add(Account(
+      // Crear un objeto InvoiceAccount a partir de la factura
+      final account = InvoiceAccount(
         id: invoice.id.toString(),
         customer: customer,
         concept: invoice.concept,
@@ -158,46 +154,66 @@ class AccountProvider with ChangeNotifier {
         totalAmount: invoice.amount,
         paidAmount: invoice.paymentsAmount,
         status: status,
-        payments: [], // Los pagos podrían ser cargados por separado si es necesario
-      ));
+        // Aquí se podrían agregar los pagos si estuvieran disponibles
+        payments: [],
+      );
+      
+      accounts.add(account);
     }
     
     return accounts;
   }
   
-  Account getAccountById(String id) {
-    return _accounts.firstWhere((account) => account.id == id);
+  InvoiceAccount getInvoiceAccountById(String id) {
+    return _invoiceAccounts.firstWhere(
+      (account) => account.id == id,
+      orElse: () => throw Exception('InvoiceAccount no encontrado con ID: $id'),
+    );
   }
   
-  void addPayment(String accountId, Payment payment) {
-    final index = _accounts.indexWhere((account) => account.id == accountId);
-    if (index != -1) {
-      final account = _accounts[index];
-      final updatedPayments = [...account.payments, payment];
-      final updatedPaidAmount = account.paidAmount + payment.amount;
-      
-      AccountStatus updatedStatus;
-      if (updatedPaidAmount >= account.totalAmount) {
-        updatedStatus = AccountStatus.paid;
-      } else if (updatedPaidAmount > 0) {
-        updatedStatus = AccountStatus.partiallyPaid;
-      } else {
-        updatedStatus = account.isExpired ? AccountStatus.expired : AccountStatus.pending;
-      }
-      
-      _accounts[index] = Account(
-        id: account.id,
-        customer: account.customer,
-        concept: account.concept,
-        invoiceNumber: account.invoiceNumber,
-        expirationDate: account.expirationDate,
-        totalAmount: account.totalAmount,
-        paidAmount: updatedPaidAmount,
-        status: updatedStatus,
-        payments: updatedPayments,
-      );
-      
-      notifyListeners();
+  Future<void> addPayment(String accountId, Payment payment) async {
+    // Buscar la cuenta por ID
+    final accountIndex = _invoiceAccounts.indexWhere((account) => account.id == accountId);
+    
+    if (accountIndex == -1) {
+      throw Exception('InvoiceAccount no encontrado con ID: $accountId');
     }
+    
+    // Obtener la cuenta actual
+    final currentAccount = _invoiceAccounts[accountIndex];
+    
+    // Crear una lista mutable de pagos
+    final List<Payment> updatedPayments = List.from(currentAccount.payments)
+      ..add(payment);
+    
+    // Calcular el nuevo monto pagado
+    final double newPaidAmount = currentAccount.paidAmount + payment.amount;
+    
+    // Determinar el nuevo estado
+    InvoiceAccountStatus newStatus;
+    if (newPaidAmount >= currentAccount.totalAmount) {
+      newStatus = InvoiceAccountStatus.paid;
+    } else {
+      newStatus = InvoiceAccountStatus.partiallyPaid;
+    }
+    
+    // Crear una nueva cuenta con los pagos actualizados
+    final updatedAccount = InvoiceAccount(
+      id: currentAccount.id,
+      customer: currentAccount.customer,
+      concept: currentAccount.concept,
+      invoiceNumber: currentAccount.invoiceNumber,
+      expirationDate: currentAccount.expirationDate,
+      totalAmount: currentAccount.totalAmount,
+      paidAmount: newPaidAmount,
+      status: newStatus,
+      payments: updatedPayments,
+    );
+    
+    // Actualizar la lista de cuentas
+    _invoiceAccounts[accountIndex] = updatedAccount;
+    
+    // Notificar a los oyentes
+    notifyListeners();
   }
 }

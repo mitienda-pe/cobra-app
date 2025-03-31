@@ -641,4 +641,44 @@ class ApiService {
     
     return null;
   }
+
+  // Método para registrar un pago
+  Future<Map<String, dynamic>> registerPayment({
+    required String invoiceId,
+    required double amount,
+    required String paymentMethod,
+    String? reconciliationCode,
+    double? cashReceived,
+    double? cashChange,
+  }) async {
+    if (_useMockServices) {
+      print('Simulando registro de pago: $amount para factura $invoiceId');
+      await Future.delayed(const Duration(seconds: 1));
+      return {
+        'success': true,
+        'message': 'Pago registrado con éxito (simulado)',
+        'payment_id': DateTime.now().millisecondsSinceEpoch.toString(),
+      };
+    }
+    
+    try {
+      final response = await _apiClient.dio.post(
+        '$baseUrl/api/payments/register',
+        data: {
+          'invoice_id': invoiceId,
+          'amount': amount,
+          'payment_method': paymentMethod,
+          'reconciliation_code': reconciliationCode,
+          'cash_received': cashReceived,
+          'cash_change': cashChange,
+          'payment_date': DateTime.now().toIso8601String(),
+        },
+      );
+
+      return response.data;
+    } catch (e) {
+      print('Error al registrar el pago: $e');
+      rethrow;
+    }
+  }
 }

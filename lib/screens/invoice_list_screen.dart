@@ -35,11 +35,19 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   void initState() {
     super.initState();
     _determinePosition();
-    
+
     // Cargar las facturas al iniciar la pantalla
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _reloadInvoicesWithFilters();
+      if (mounted) {
+        _reloadInvoicesWithFilters();
+      }
     });
+  }
+
+  @override
+  void dispose() {
+    // Asegurarse de que no queden listeners o recursos sin liberar
+    super.dispose();
   }
 
   Future<void> _determinePosition() async {
@@ -69,9 +77,12 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
 
       try {
         Position position = await Geolocator.getCurrentPosition();
-        setState(() {
-          _currentPosition = position;
-        });
+        // Verificar si el widget sigue montado antes de llamar a setState
+        if (mounted) {
+          setState(() {
+            _currentPosition = position;
+          });
+        }
       } catch (e) {
         // Error al obtener la ubicación
         print('Error al obtener la ubicación: $e');
@@ -86,7 +97,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Facturas del Portafolio'),
+        title: const Text('Facturas'),
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
@@ -118,7 +129,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
             icon: const Icon(Icons.refresh),
             onPressed: () {
               // Recargar las facturas con los filtros actuales
-              _reloadInvoicesWithFilters();
+              _forceReloadInvoices();
             },
           ),
         ],
@@ -130,13 +141,15 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
             Consumer<AuthProvider>(
               builder: (context, authProvider, child) {
                 final userData = authProvider.userData;
-                final userName = userData != null && userData.containsKey('name') 
-                    ? userData['name'] 
-                    : 'Usuario';
-                final userEmail = userData != null && userData.containsKey('email') 
-                    ? userData['email'] 
-                    : authProvider.phoneNumber;
-                
+                final userName =
+                    userData != null && userData.containsKey('name')
+                        ? userData['name']
+                        : 'Usuario';
+                final userEmail =
+                    userData != null && userData.containsKey('email')
+                        ? userData['email']
+                        : authProvider.phoneNumber;
+
                 return UserAccountsDrawerHeader(
                   accountName: Text(userName),
                   accountEmail: Text(userEmail),
@@ -181,26 +194,29 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
               onTap: () async {
                 // Mostrar diálogo de confirmación
                 final shouldLogout = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Cerrar Sesión'),
-                    content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancelar'),
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Cerrar Sesión'),
+                        content: const Text(
+                            '¿Estás seguro de que deseas cerrar sesión?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancelar'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Cerrar Sesión'),
+                          ),
+                        ],
                       ),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Cerrar Sesión'),
-                      ),
-                    ],
-                  ),
-                ) ?? false;
-                
+                    ) ??
+                    false;
+
                 if (shouldLogout) {
                   Navigator.pop(context); // Cerrar el drawer
-                  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                  final authProvider =
+                      Provider.of<AuthProvider>(context, listen: false);
                   await authProvider.logout();
                   // La redirección a la pantalla de login se manejará automáticamente
                   // a través del redirect configurado en el GoRouter
@@ -257,7 +273,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
           }
 
           // Filtrar cuentas por estado si hay un filtro seleccionado
-          List<InvoiceAccount> filteredAccounts = List<InvoiceAccount>.from(accounts);
+          List<InvoiceAccount> filteredAccounts =
+              List<InvoiceAccount>.from(accounts);
 
           // Ocultar cuentas pagadas si la opción está activada
           if (_hidePaidAccounts) {
@@ -309,7 +326,10 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
           return Column(
             children: [
               // Mostrar filtros activos
-              if (_selectedStatus != null || _hidePaidAccounts || _startDate != null || _endDate != null)
+              if (_selectedStatus != null ||
+                  _hidePaidAccounts ||
+                  _startDate != null ||
+                  _endDate != null)
                 Container(
                   padding: const EdgeInsets.all(8),
                   color: Colors.grey[200],
@@ -353,8 +373,10 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                 });
                                 _reloadInvoicesWithFilters();
                               },
-                              backgroundColor: _getStatusColor(_selectedStatus!).withOpacity(0.2),
-                              side: BorderSide(color: _getStatusColor(_selectedStatus!)),
+                              backgroundColor: _getStatusColor(_selectedStatus!)
+                                  .withOpacity(0.2),
+                              side: BorderSide(
+                                  color: _getStatusColor(_selectedStatus!)),
                             ),
                           if (_hidePaidAccounts)
                             Chip(
@@ -371,7 +393,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                             ),
                           if (_startDate != null)
                             Chip(
-                              label: Text('Desde: ${DateFormat('dd/MM/yyyy').format(_startDate!)}'),
+                              label: Text(
+                                  'Desde: ${DateFormat('dd/MM/yyyy').format(_startDate!)}'),
                               deleteIcon: const Icon(Icons.close, size: 18),
                               onDeleted: () {
                                 setState(() {
@@ -385,7 +408,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                             ),
                           if (_endDate != null)
                             Chip(
-                              label: Text('Hasta: ${DateFormat('dd/MM/yyyy').format(_endDate!)}'),
+                              label: Text(
+                                  'Hasta: ${DateFormat('dd/MM/yyyy').format(_endDate!)}'),
                               deleteIcon: const Icon(Icons.close, size: 18),
                               onDeleted: () {
                                 setState(() {
@@ -402,10 +426,11 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                     ],
                   ),
                 ),
-              
+
               // Mostrar información de ordenamiento
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 color: Colors.grey[100],
                 child: Row(
                   children: [
@@ -426,11 +451,11 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                   ],
                 ),
               ),
-              
+
               // Lista de facturas
               Expanded(
                 child: RefreshIndicator(
-                  onRefresh: _reloadInvoicesWithFilters,
+                  onRefresh: _forceReloadInvoices,
                   child: ListView.builder(
                     padding: const EdgeInsets.all(8),
                     itemCount: filteredAccounts.length,
@@ -439,7 +464,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       return InvoiceListItem(
                         account: account,
                         onTap: () {
-                          GoRouter.of(context).go('/invoice-detail/${account.id}');
+                          GoRouter.of(context)
+                              .go('/invoice-detail/${account.id}');
                         },
                       );
                     },
@@ -470,14 +496,20 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
         accounts.sort((a, b) {
           // Orden: Vencido > Pendiente > Pago Parcial > Pagado
           int getStatusPriority(InvoiceAccount account) {
-            if (account.isExpired && account.status != InvoiceAccountStatus.paid) return 0;
+            if (account.isExpired &&
+                account.status != InvoiceAccountStatus.paid) return 0;
             switch (account.status) {
-              case InvoiceAccountStatus.pending: return 1;
-              case InvoiceAccountStatus.partiallyPaid: return 2;
-              case InvoiceAccountStatus.paid: return 3;
-              case InvoiceAccountStatus.expired: return 0;
+              case InvoiceAccountStatus.pending:
+                return 1;
+              case InvoiceAccountStatus.partiallyPaid:
+                return 2;
+              case InvoiceAccountStatus.paid:
+                return 3;
+              case InvoiceAccountStatus.expired:
+                return 0;
             }
           }
+
           return getStatusPriority(a).compareTo(getStatusPriority(b));
         });
         break;
@@ -492,11 +524,11 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
           accounts.sort((a, b) {
             final aLocation = a.customer.contact.location;
             final bLocation = b.customer.contact.location;
-            
+
             if (aLocation == null && bLocation == null) return 0;
             if (aLocation == null) return 1;
             if (bLocation == null) return -1;
-            
+
             try {
               final aDistance = Geolocator.distanceBetween(
                 _currentPosition!.latitude,
@@ -504,14 +536,14 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                 aLocation.latitude,
                 aLocation.longitude,
               );
-              
+
               final bDistance = Geolocator.distanceBetween(
                 _currentPosition!.latitude,
                 _currentPosition!.longitude,
                 bLocation.latitude,
                 bLocation.longitude,
               );
-              
+
               return aDistance.compareTo(bDistance);
             } catch (e) {
               // Si hay un error al calcular la distancia, mantener el orden original
@@ -578,12 +610,17 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Estado:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text('Estado:',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
                   _buildFilterOption(context, null, 'Todos'),
-                  _buildFilterOption(context, InvoiceAccountStatus.pending, 'Pendientes'),
-                  _buildFilterOption(context, InvoiceAccountStatus.partiallyPaid, 'Pago Parcial'),
-                  _buildFilterOption(context, InvoiceAccountStatus.paid, 'Pagados'),
-                  _buildFilterOption(context, InvoiceAccountStatus.expired, 'Vencidos'),
+                  _buildFilterOption(
+                      context, InvoiceAccountStatus.pending, 'Pendientes'),
+                  _buildFilterOption(context,
+                      InvoiceAccountStatus.partiallyPaid, 'Pago Parcial'),
+                  _buildFilterOption(
+                      context, InvoiceAccountStatus.paid, 'Pagados'),
+                  _buildFilterOption(
+                      context, InvoiceAccountStatus.expired, 'Vencidos'),
                   const Divider(),
                   SwitchListTile(
                     title: const Text('Ocultar facturas pagadas'),
@@ -597,7 +634,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                     },
                   ),
                   const Divider(),
-                  const Text('Rango de fechas:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text('Rango de fechas:',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -614,7 +652,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                               setStateDialog(() {
                                 setState(() {
                                   _startDate = picked;
-                                  _dateStart = DateFormat('yyyy-MM-dd').format(picked);
+                                  _dateStart =
+                                      DateFormat('yyyy-MM-dd').format(picked);
                                 });
                               });
                             }
@@ -638,7 +677,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                               setStateDialog(() {
                                 setState(() {
                                   _endDate = picked;
-                                  _dateEnd = DateFormat('yyyy-MM-dd').format(picked);
+                                  _dateEnd =
+                                      DateFormat('yyyy-MM-dd').format(picked);
                                 });
                               });
                             }
@@ -696,9 +736,12 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildSortOption(context, SortOption.status, 'Estado'),
-            _buildSortOption(context, SortOption.expirationDate, 'Fecha de vencimiento (menor a mayor)'),
-            _buildSortOption(context, SortOption.amount, 'Monto (mayor a menor)'),
-            _buildSortOption(context, SortOption.distance, 'Distancia (más cercano primero)'),
+            _buildSortOption(context, SortOption.expirationDate,
+                'Fecha de vencimiento (menor a mayor)'),
+            _buildSortOption(
+                context, SortOption.amount, 'Monto (mayor a menor)'),
+            _buildSortOption(context, SortOption.distance,
+                'Distancia (más cercano primero)'),
           ],
         ),
         actions: [
@@ -718,7 +761,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     );
   }
 
-  Widget _buildFilterOption(BuildContext context, InvoiceAccountStatus? status, String label) {
+  Widget _buildFilterOption(
+      BuildContext context, InvoiceAccountStatus? status, String label) {
     return ListTile(
       title: Text(label),
       leading: Radio<InvoiceAccountStatus?>(
@@ -738,7 +782,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     );
   }
 
-  Widget _buildSortOption(BuildContext context, SortOption option, String label) {
+  Widget _buildSortOption(
+      BuildContext context, SortOption option, String label) {
     return ListTile(
       title: Text(label),
       leading: Radio<SortOption>(
@@ -759,8 +804,9 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   }
 
   Future<void> _reloadInvoicesWithFilters() async {
-    final accountProvider = Provider.of<InvoiceAccountProvider>(context, listen: false);
-    
+    final accountProvider =
+        Provider.of<InvoiceAccountProvider>(context, listen: false);
+
     // Convertir el estado seleccionado al formato esperado por la API
     String? apiStatus;
     if (_selectedStatus != null) {
@@ -779,12 +825,69 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
           break;
       }
     }
-    
+
     await accountProvider.loadInvoiceAccounts(
       status: apiStatus,
       dateStart: _dateStart,
       dateEnd: _dateEnd,
+      // No forzamos la recarga a menos que sea explícitamente solicitado por el botón de refresh
     );
+  }
+
+  // Método para forzar la recarga de datos
+  Future<void> _forceReloadInvoices() async {
+    if (!mounted) return;
+    
+    final accountProvider =
+        Provider.of<InvoiceAccountProvider>(context, listen: false);
+
+    // Convertir el estado seleccionado al formato esperado por la API
+    String? apiStatus;
+    if (_selectedStatus != null) {
+      switch (_selectedStatus!) {
+        case InvoiceAccountStatus.pending:
+          apiStatus = 'pending';
+          break;
+        case InvoiceAccountStatus.partiallyPaid:
+          apiStatus = 'partial';
+          break;
+        case InvoiceAccountStatus.paid:
+          apiStatus = 'paid';
+          break;
+        case InvoiceAccountStatus.expired:
+          apiStatus = 'expired';
+          break;
+      }
+    }
+
+    // Mostrar un SnackBar indicando que se están recargando los datos
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Actualizando datos desde el servidor...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
+    try {
+      await accountProvider.loadInvoiceAccounts(
+        status: apiStatus,
+        dateStart: _dateStart,
+        dateEnd: _dateEnd,
+        forceRefresh: true, // Forzar la recarga de datos
+      );
+    } catch (e) {
+      print('Error al recargar facturas: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar datos: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 

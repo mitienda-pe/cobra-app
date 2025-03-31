@@ -30,23 +30,27 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchInvoices();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _fetchInvoices();
+      }
+    });
   }
 
   Future<void> _fetchInvoices() async {
+    if (_isLoading) return;
+    
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      // Obtener el ID del cliente desde el account
       final accountProvider = Provider.of<InvoiceAccountProvider>(context, listen: false);
       final account = accountProvider.getInvoiceAccountById(widget.invoiceAccountId);
       
       print('Solicitando facturas para cliente UUID: ${account.customer.id} con include_clients=true');
       
-      // Llamar a la API para obtener las facturas usando el UUID en lugar del ID numérico
       final response = await _apiService.getInvoices(
         clientUuid: account.customer.id, // Usar UUID en lugar de ID numérico
         includeClients: true, // Incluir información de clientes
@@ -55,23 +59,32 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       if (response != null) {
         print('Facturas obtenidas: ${response.invoices.length}');
         
-        // Verificar si las facturas incluyen datos de clientes
-        if (response.invoices.isNotEmpty) {
-          final firstInvoice = response.invoices.first;
+        final filteredInvoices = response.invoices.where((invoice) {
+          return invoice.clientId == account.customer.id;
+        }).toList();
+        
+        print('Facturas filtradas del mismo cliente: ${filteredInvoices.length}');
+        
+        if (filteredInvoices.isNotEmpty) {
+          final firstInvoice = filteredInvoices.first;
           print('Primera factura - ID: ${firstInvoice.id}, Número: ${firstInvoice.invoiceNumber}');
           print('Cliente en factura: ${firstInvoice.client != null ? "SÍ" : "NO"}');
           if (firstInvoice.client != null) {
             print('Datos del cliente: ID=${firstInvoice.client!.id}, Nombre=${firstInvoice.client!.businessName}');
           }
         }
+        
+        setState(() {
+          _invoices = filteredInvoices;
+          _isLoading = false;
+        });
       } else {
         print('No se recibió respuesta de facturas');
+        setState(() {
+          _invoices = [];
+          _isLoading = false;
+        });
       }
-
-      setState(() {
-        _invoices = response?.invoices;
-        _isLoading = false;
-      });
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -85,7 +98,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final accountProvider = Provider.of<InvoiceAccountProvider>(context);
+    final accountProvider = Provider.of<InvoiceAccountProvider>(context, listen: false);
     final account = accountProvider.getInvoiceAccountById(widget.invoiceAccountId);
     
     final dateFormat = DateFormat('dd/MM/yyyy');
@@ -100,322 +113,292 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            // Navegar hacia atrás o a la pantalla de lista de facturas
-            if (Navigator.canPop(context)) {
-              Navigator.pop(context);
-            } else {
-              GoRouter.of(context).go('/invoices');
-            }
-          },
+          onPressed: () => context.go('/invoices'),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.account_circle),
-            onPressed: () {
-              // Navegar al perfil del usuario
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Función de perfil en desarrollo'),
-                ),
-              );
-            },
-          ),
-        ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Información del cliente
-            Container(
-              padding: const EdgeInsets.all(16),
-              color: Theme.of(context).primaryColor.withOpacity(0.1),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Expanded(
-                        child: Text(
-                          account.customer.commercialName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        ),
+                      Text(
+                        _errorMessage!,
+                        style: const TextStyle(color: Colors.red),
+                        textAlign: TextAlign.center,
                       ),
-                      _buildStatusChip(account),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _fetchInvoices,
+                        child: const Text('Reintentar'),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'RUC: ${account.customer.ruc}',
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Contacto: ${account.customer.contact.name}',
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Dirección: ${account.customer.contact.address}',
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Teléfono: ${account.customer.contact.phone}',
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                ],
-              ),
-            ),
-            
-            // Información de la factura
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Información de la Factura',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Card(
-                    elevation: 1,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Número de Factura:',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              Text(
-                                account.invoiceNumber,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Concepto:',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  account.concept,
-                                  textAlign: TextAlign.right,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Fecha de Vencimiento:',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              Text(
-                                dateFormat.format(account.expirationDate),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: account.isExpired ? Colors.red : null,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Monto Total:',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              Text(
-                                currencyFormat.format(account.totalAmount),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (account.paidAmount > 0) ...[
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Monto Pagado:',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                Text(
-                                  currencyFormat.format(account.paidAmount),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Saldo Pendiente:',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                Text(
-                                  currencyFormat.format(account.remainingAmount),
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: account.remainingAmount > 0 ? Colors.red : Colors.green,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            LinearProgressIndicator(
-                              value: account.paidAmount / account.totalAmount,
-                              backgroundColor: Colors.grey[200],
-                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.green),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            // Pagos realizados
-            if (account.payments.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                )
+              : SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Pagos Realizados',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: account.payments.length,
-                      itemBuilder: (context, index) {
-                        final payment = account.payments[index];
-                        return _buildPaymentItem(payment, dateFormat, currencyFormat);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            
-            // Facturas relacionadas
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Facturas Relacionadas',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.blue,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  
-                  // Mostrar indicador de carga, error o lista de facturas
-                  if (_isLoading)
-                    const Center(child: CircularProgressIndicator())
-                  else if (_errorMessage != null)
-                    Center(
+                    // Información del cliente
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      color: Theme.of(context).primaryColor.withOpacity(0.1),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            _errorMessage!,
-                            style: const TextStyle(color: Colors.red),
-                            textAlign: TextAlign.center,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  account.customer.commercialName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
+                              _buildStatusChip(account),
+                            ],
                           ),
                           const SizedBox(height: 8),
-                          ElevatedButton(
-                            onPressed: _fetchInvoices,
-                            child: const Text('Reintentar'),
+                          Text(
+                            'RUC: ${account.customer.ruc}',
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Contacto: ${account.customer.contact.name}',
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Dirección: ${account.customer.contact.address}',
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Teléfono: ${account.customer.contact.phone}',
+                            style: const TextStyle(fontSize: 14),
                           ),
                         ],
                       ),
-                    )
-                  else if (_invoices == null || _invoices!.isEmpty)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Text(
-                          'No hay facturas disponibles para este cliente.',
-                          textAlign: TextAlign.center,
+                    ),
+                    
+                    // Información de la factura
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Información de la Factura',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Card(
+                            elevation: 1,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        'Número de Factura:',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(
+                                        account.invoiceNumber,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        'Concepto:',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Text(
+                                          account.concept,
+                                          textAlign: TextAlign.right,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        'Fecha de Vencimiento:',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(
+                                        dateFormat.format(account.expirationDate),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: account.isExpired ? Colors.red : null,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        'Monto Total:',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(
+                                        currencyFormat.format(account.totalAmount),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (account.paidAmount > 0) ...[
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text(
+                                          'Monto Pagado:',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        Text(
+                                          currencyFormat.format(account.paidAmount),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text(
+                                          'Saldo Pendiente:',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        Text(
+                                          currencyFormat.format(account.remainingAmount),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: account.remainingAmount > 0 ? Colors.red : Colors.green,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    LinearProgressIndicator(
+                                      value: account.paidAmount / account.totalAmount,
+                                      backgroundColor: Colors.grey[200],
+                                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.green),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Pagos realizados
+                    if (account.payments.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Pagos Realizados',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: account.payments.length,
+                              itemBuilder: (context, index) {
+                                final payment = account.payments[index];
+                                return _buildPaymentItem(payment, dateFormat, currencyFormat);
+                              },
+                            ),
+                          ],
                         ),
                       ),
-                    )
-                  else
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _invoices!.length,
-                      itemBuilder: (context, index) {
-                        final invoice = _invoices![index];
-                        return _buildInvoiceItem(invoice, dateFormat, currencyFormat);
-                      },
-                    ),
-                ],
+                    
+                    // Facturas relacionadas
+                    if (_invoices != null && _invoices!.isNotEmpty)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 24),
+                          const Text(
+                            'Facturas relacionadas del mismo cliente',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _invoices!.length,
+                            itemBuilder: (context, index) {
+                              final invoice = _invoices![index];
+                              // No mostrar la factura actual en la lista de facturas relacionadas
+                              if (invoice.id == account.id) {
+                                return const SizedBox.shrink();
+                              }
+                              return _buildInvoiceItem(invoice, dateFormat, currencyFormat, false);
+                            },
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
       bottomNavigationBar: account.status != InvoiceAccountStatus.paid
           ? SafeArea(
               child: Padding(
@@ -582,6 +565,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     Invoice invoice,
     DateFormat dateFormat,
     NumberFormat currencyFormat,
+    [bool showPayButton = false]
   ) {
     Color statusColor;
     String statusText;
@@ -614,169 +598,177 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    invoice.invoiceNumber,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: statusColor,
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    statusText,
-                    style: TextStyle(
-                      color: statusColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _buildClientInfo(invoice),
-            Text(
-              invoice.concept,
-              style: const TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Vencimiento',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
-                      ),
-                    ),
-                    Text(
-                      dateFormat.format(invoice.dueDate),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: invoice.isExpired ? Colors.red : null,
-                      ),
-                    ),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Monto',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
-                      ),
-                    ),
-                    Text(
-                      currencyFormat.format(invoice.amount),
+      child: InkWell(
+        onTap: () {
+          // Navegar al detalle de esta factura
+          GoRouter.of(context).go('/invoice-detail/${invoice.id}');
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      invoice.invoiceNumber,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ),
-            if (invoice.paymentsCount > 0) ...[
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: statusColor,
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      statusText,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 8),
-              const Divider(),
+              _buildClientInfo(invoice),
+              Text(
+                invoice.concept,
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Pagos realizados: ${invoice.paymentsCount}',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
-                    ),
-                  ),
                   Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Pagado',
+                        'Vencimiento',
                         style: TextStyle(
                           color: Colors.grey[600],
                           fontSize: 12,
                         ),
                       ),
                       Text(
-                        currencyFormat.format(invoice.paymentsAmount),
-                        style: const TextStyle(
-                          color: Colors.green,
+                        dateFormat.format(invoice.dueDate),
+                        style: TextStyle(
                           fontWeight: FontWeight.bold,
+                          color: invoice.isExpired ? Colors.red : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Monto',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        currencyFormat.format(invoice.amount),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
                         ),
                       ),
                     ],
                   ),
                 ],
               ),
-              const SizedBox(height: 4),
-              LinearProgressIndicator(
-                value: invoice.paymentsAmount / invoice.amount,
-                backgroundColor: Colors.grey[200],
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.green),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    'Pendiente: ${currencyFormat.format(invoice.remainingAmount)}',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
+              if (invoice.paymentsCount > 0) ...[
+                const SizedBox(height: 8),
+                const Divider(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Pagos realizados: ${invoice.paymentsCount}',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 12,
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Pagado',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          currencyFormat.format(invoice.paymentsAmount),
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                LinearProgressIndicator(
+                  value: invoice.paymentsAmount / invoice.amount,
+                  backgroundColor: Colors.grey[200],
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.green),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Pendiente: ${currencyFormat.format(invoice.remainingAmount)}',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              // Solo mostrar el botón de pago si showPayButton es true y la factura está pendiente
+              if (showPayButton && invoice.status == 'pending') ...[
+                const SizedBox(height: 8),
+                ElevatedButton(
+                  onPressed: () {
+                    GoRouter.of(context).go('/register-payment/${invoice.id}');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    minimumSize: const Size(double.infinity, 36),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 8),
-            if (invoice.status == 'pending') ...[
-              ElevatedButton(
-                onPressed: () {
-                  GoRouter.of(context).go('/register-payment/${invoice.id}');
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).primaryColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  minimumSize: const Size(double.infinity, 36),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                  child: const Text('Registrar Pago'),
                 ),
-                child: const Text('Registrar Pago'),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

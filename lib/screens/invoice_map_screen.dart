@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/invoice_account.dart';
 import '../providers/invoice_account_provider.dart';
-import '../providers/auth_provider.dart';
 
 enum SortOption {
   status,
@@ -67,9 +66,12 @@ class _InvoiceMapScreenState extends State<InvoiceMapScreen> {
 
       try {
         Position position = await Geolocator.getCurrentPosition();
-        setState(() {
-          _currentPosition = position;
-        });
+        // Verificar si el widget sigue montado antes de llamar a setState
+        if (mounted) {
+          setState(() {
+            _currentPosition = position;
+          });
+        }
       } catch (e) {
         // Error al obtener la ubicación
         print('Error al obtener la ubicación: $e');
@@ -85,13 +87,11 @@ class _InvoiceMapScreenState extends State<InvoiceMapScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mapa de Facturas'),
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () {
-              Scaffold.of(context).openDrawer();
-            },
-          ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            context.go('/invoices');
+          },
         ),
         actions: [
           IconButton(
@@ -106,101 +106,14 @@ class _InvoiceMapScreenState extends State<InvoiceMapScreen> {
               _showSortDialog(context);
             },
           ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              // Recargar las facturas con los filtros actuales
+              _forceReloadInvoices();
+            },
+          ),
         ],
-      ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            Consumer<AuthProvider>(
-              builder: (context, authProvider, child) {
-                final userData = authProvider.userData;
-                final userName = userData != null && userData.containsKey('name') 
-                    ? userData['name'] 
-                    : 'Usuario';
-                final userEmail = userData != null && userData.containsKey('email') 
-                    ? userData['email'] 
-                    : authProvider.phoneNumber;
-                
-                return UserAccountsDrawerHeader(
-                  accountName: Text(userName),
-                  accountEmail: Text(userEmail),
-                  currentAccountPicture: CircleAvatar(
-                    backgroundColor: Colors.white,
-                    child: Text(
-                      userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                      style: const TextStyle(fontSize: 40.0),
-                    ),
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor,
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.receipt),
-              title: const Text('Facturas'),
-              onTap: () {
-                Navigator.pop(context); // Cerrar el drawer
-                GoRouter.of(context).go('/invoices');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.map),
-              title: const Text('Mapa de Facturas'),
-              selected: true,
-              onTap: () {
-                Navigator.pop(context); // Cerrar el drawer
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.person),
-              title: const Text('Perfil'),
-              onTap: () {
-                Navigator.pop(context); // Cerrar el drawer
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Función de perfil en desarrollo'),
-                  ),
-                );
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.exit_to_app),
-              title: const Text('Cerrar Sesión'),
-              onTap: () async {
-                // Mostrar diálogo de confirmación
-                final shouldLogout = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Cerrar Sesión'),
-                    content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancelar'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Cerrar Sesión'),
-                      ),
-                    ],
-                  ),
-                ) ?? false;
-                
-                if (shouldLogout) {
-                  Navigator.pop(context); // Cerrar el drawer
-                  final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                  await authProvider.logout();
-                  // La redirección a la pantalla de login se manejará automáticamente
-                  // a través del redirect configurado en el GoRouter
-                }
-              },
-            ),
-          ],
-        ),
       ),
       body: Consumer<InvoiceAccountProvider>(
         builder: (context, accountProvider, child) {
@@ -804,6 +717,44 @@ class _InvoiceMapScreenState extends State<InvoiceMapScreen> {
     
     await accountProvider.loadInvoiceAccounts(
       status: apiStatus,
+      // No forzamos la recarga a menos que sea explícitamente solicitado
+    );
+  }
+  
+  // Método para forzar la recarga de datos
+  Future<void> _forceReloadInvoices() async {
+    final accountProvider = Provider.of<InvoiceAccountProvider>(context, listen: false);
+    
+    // Convertir el estado seleccionado al formato esperado por la API
+    String? apiStatus;
+    if (_selectedStatus != null) {
+      switch (_selectedStatus!) {
+        case InvoiceAccountStatus.pending:
+          apiStatus = 'pending';
+          break;
+        case InvoiceAccountStatus.partiallyPaid:
+          apiStatus = 'partial';
+          break;
+        case InvoiceAccountStatus.paid:
+          apiStatus = 'paid';
+          break;
+        case InvoiceAccountStatus.expired:
+          apiStatus = 'expired';
+          break;
+      }
+    }
+    
+    // Mostrar un SnackBar indicando que se están recargando los datos
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Actualizando datos desde el servidor...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+    
+    await accountProvider.loadInvoiceAccounts(
+      status: apiStatus,
+      forceRefresh: true, // Forzar la recarga de datos
     );
   }
 }

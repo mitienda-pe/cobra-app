@@ -7,7 +7,7 @@ class ClientProvider with ChangeNotifier {
   List<Client> _clients = [];
   bool _isLoading = false;
   String? _errorMessage;
-  Map<int, Client> _clientsCache = {}; // Cache de clientes por ID
+  final Map<int, Client> _clientsCache = {}; // Cache de clientes por ID
   
   List<Client> get clients => _clients;
   bool get isLoading => _isLoading;

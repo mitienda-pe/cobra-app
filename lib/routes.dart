@@ -11,6 +11,12 @@ import 'screens/invoice_list_screen.dart';
 import 'screens/invoice_map_screen.dart';
 import 'screens/invoice_detail_screen.dart';
 import 'screens/register_payment_screen.dart';
+// Importaciones para las nuevas pantallas de cuotas
+import 'screens/instalment_list_screen.dart';
+import 'screens/instalment_payment_screen.dart';
+import 'screens/instalment_detail_screen.dart';
+import 'screens/instalment_map_screen.dart';
+import 'screens/payment_receipt_screen.dart';
 
 class AppRouter {
   static GoRouter getRouter(BuildContext context) {
@@ -35,14 +41,14 @@ class AppRouter {
           return '/login';
         }
         
-        // Si está autenticado y está en la ruta de login o verificación OTP, redirigir a la lista de facturas
+        // Si está autenticado y está en la ruta de login o verificación OTP, redirigir a la lista de cuotas
         if (isLoggedIn && (isLoginRoute || isOtpRoute)) {
-          return '/invoices';
+          return '/instalments';
         }
         
         // Redirecciones para rutas antiguas
         if (state.matchedLocation == '/accounts') {
-          return '/invoices';
+          return '/instalments';
         }
         if (state.matchedLocation == '/map') {
           return '/invoice-map';
@@ -70,6 +76,45 @@ class AppRouter {
             final email = state.pathParameters['email'] ?? '';
             final method = state.uri.queryParameters['method'] ?? 'email';
             return OtpVerificationScreen(email: email, method: method);
+          },
+        ),
+        // Rutas para cuotas (instalments)
+        GoRoute(
+          path: '/instalments',
+          builder: (context, state) => const InstalmentListScreen(),
+        ),
+        GoRoute(
+          path: '/instalments/:id',
+          builder: (context, state) {
+            final instalmentId = int.parse(state.pathParameters['id']!);
+            return InstalmentDetailScreen(instalmentId: instalmentId);
+          },
+        ),
+        GoRoute(
+          path: '/instalments/:id/pay',
+          builder: (context, state) {
+            final instalmentId = int.parse(state.pathParameters['id']!);
+            return InstalmentPaymentScreen(instalmentId: instalmentId);
+          },
+        ),
+        GoRoute(
+          path: '/instalment-map',
+          builder: (context, state) => const InstalmentMapScreen(),
+        ),
+        // Ruta para el comprobante de pago
+        GoRoute(
+          path: '/payment-receipt',
+          builder: (context, state) {
+            final Map<String, dynamic> args = state.extra as Map<String, dynamic>;
+            return PaymentReceiptScreen(
+              paymentData: args['paymentData'],
+              instalment: args['instalment'],
+              amount: args['amount'],
+              paymentMethod: args['paymentMethod'],
+              reconciliationCode: args['reconciliationCode'],
+              cashReceived: args['cashReceived'],
+              cashChange: args['cashChange'],
+            );
           },
         ),
         // Rutas con nomenclatura "invoice"

@@ -234,7 +234,7 @@ class _InvoiceMapScreenState extends State<InvoiceMapScreen> {
                             child: _buildMarkerIcon(account),
                           ),
                         );
-                      }).toList(),
+                      }),
                     ],
                   ),
                 ],

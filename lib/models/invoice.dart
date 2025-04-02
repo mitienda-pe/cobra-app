@@ -10,6 +10,7 @@ class Invoice {
   final String concept;
   final double amount;
   final DateTime dueDate;
+  final DateTime? issueDate;
   final String status;
   final String? externalId;
   final String? notes;
@@ -25,6 +26,7 @@ class Invoice {
   final int paymentsCount;
   final double paymentsAmount;
   final int daysOverdue;
+  final int instalmentCount;
 
   Invoice({
     required this.id,
@@ -35,6 +37,7 @@ class Invoice {
     required this.concept,
     required this.amount,
     required this.dueDate,
+    this.issueDate,
     required this.status,
     this.externalId,
     this.notes,
@@ -48,6 +51,7 @@ class Invoice {
     this.paymentsCount = 0,
     this.paymentsAmount = 0,
     this.daysOverdue = 0,
+    this.instalmentCount = 1,
   });
 
   double get remainingAmount => amount - paymentsAmount;
@@ -104,6 +108,7 @@ class Invoice {
       concept: json['concept'] ?? '',
       amount: parseAmount(json['amount']),
       dueDate: json['due_date'] != null ? dateFormat.parse(json['due_date']) : DateTime.now(),
+      issueDate: json['issue_date'] != null ? dateFormat.parse(json['issue_date']) : null,
       status: json['status'] ?? 'pending',
       externalId: json['external_id'],
       notes: json['notes'],
@@ -117,6 +122,7 @@ class Invoice {
       paymentsCount: json['payments_count'] ?? 0,
       paymentsAmount: parseAmount(json['payments_amount']),
       daysOverdue: json['days_overdue'] ?? 0,
+      instalmentCount: json['instalment_count'] ?? 1,
     );
   }
 }

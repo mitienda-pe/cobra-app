@@ -227,7 +227,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                       children: [
                         const Text('Monto pendiente actual:'),
                         Text(
-                          '${currencyFormat.format(invoiceAccount.remainingAmount)}',
+                          currencyFormat.format(invoiceAccount.remainingAmount),
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -238,7 +238,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                       children: [
                         const Text('Monto a pagar:'),
                         Text(
-                          '${currencyFormat.format(double.tryParse(_amountController.text) ?? 0.0)}',
+                          currencyFormat.format(double.tryParse(_amountController.text) ?? 0.0),
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Colors.green,
@@ -252,7 +252,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                       children: [
                         const Text('Quedará pendiente:'),
                         Text(
-                          '${currencyFormat.format(_remainingAfterPayment)}',
+                          currencyFormat.format(_remainingAfterPayment),
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: _remainingAfterPayment > 0 ? Colors.orange : Colors.green,
@@ -269,7 +269,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                         children: [
                           const Text('Monto recibido:'),
                           Text(
-                            '${currencyFormat.format(double.tryParse(_cashReceivedController.text) ?? 0.0)}',
+                            currencyFormat.format(double.tryParse(_cashReceivedController.text) ?? 0.0),
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ],
@@ -280,7 +280,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                         children: [
                           const Text('Cambio a devolver:'),
                           Text(
-                            '${currencyFormat.format(_cashChange)}',
+                            currencyFormat.format(_cashChange),
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: _cashChange > 0 ? Colors.blue : Colors.grey,

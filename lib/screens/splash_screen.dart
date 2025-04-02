@@ -34,7 +34,7 @@ class _SplashScreenState extends State<SplashScreen> {
     
     // Redirigir según el estado de autenticación
     if (authProvider.isAuthenticated) {
-      GoRouter.of(context).go('/accounts');
+      GoRouter.of(context).go('/instalments');
     } else {
       GoRouter.of(context).go('/login');
     }

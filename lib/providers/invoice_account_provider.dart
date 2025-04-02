@@ -315,7 +315,7 @@ class InvoiceAccountProvider with ChangeNotifier {
         // pero no inmediatamente para evitar múltiples llamadas a la API
         _lastFetchTime = DateTime.now().subtract(const Duration(minutes: 55));
         
-        print('Pago registrado con éxito: ${payment.amount} para la factura ${invoiceAccountId}');
+        print('Pago registrado con éxito: ${payment.amount} para la factura $invoiceAccountId');
         print('Monto pagado: ${updatedAccount.paidAmount}, Monto pendiente: ${updatedAccount.remainingAmount}');
       } else {
         throw Exception('No se encontró la factura con ID $invoiceAccountId');

@@ -13,9 +13,9 @@ class InvoiceDetailScreen extends StatefulWidget {
   final String invoiceAccountId;
 
   const InvoiceDetailScreen({
-    Key? key,
+    super.key,
     required this.invoiceAccountId,
-  }) : super(key: key);
+  });
 
   @override
   _InvoiceDetailScreenState createState() => _InvoiceDetailScreenState();

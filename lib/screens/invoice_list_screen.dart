@@ -176,6 +176,14 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.receipt_long),
+              title: const Text('Cobranza'),
+              onTap: () {
+                Navigator.pop(context); // Cerrar el drawer
+                GoRouter.of(context).go('/instalments');
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.person),
               title: const Text('Perfil'),
               onTap: () {
@@ -497,7 +505,9 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
           // Orden: Vencido > Pendiente > Pago Parcial > Pagado
           int getStatusPriority(InvoiceAccount account) {
             if (account.isExpired &&
-                account.status != InvoiceAccountStatus.paid) return 0;
+                account.status != InvoiceAccountStatus.paid) {
+              return 0;
+            }
             switch (account.status) {
               case InvoiceAccountStatus.pending:
                 return 1;
@@ -896,10 +906,10 @@ class InvoiceListItem extends StatelessWidget {
   final VoidCallback onTap;
 
   const InvoiceListItem({
-    Key? key,
+    super.key,
     required this.account,
     required this.onTap,
-  }) : super(key: key);
+  });
 
   Color _getStatusColor() {
     switch (account.status) {

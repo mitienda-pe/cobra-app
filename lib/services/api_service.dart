@@ -681,4 +681,16 @@ class ApiService {
       rethrow;
     }
   }
+  
+  // Método para obtener opciones de autenticación para solicitudes API
+  Options getAuthOptions() {
+    String? token = getCurrentToken();
+    return Options(
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    );
+  }
 }

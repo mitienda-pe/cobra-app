@@ -37,7 +37,8 @@ class InstalmentService {
       // Añadir parámetros opcionales
       if (includeClient) queryParams['include_client'] = 'true';
       if (includeInvoice) queryParams['include_invoice'] = 'true';
-      if (includeClientLocation) queryParams['include_client_location'] = 'true';
+      if (includeClientLocation)
+        queryParams['include_client_location'] = 'true';
 
       if (kDebugMode) {
         print('Query parameters: $queryParams');
@@ -177,6 +178,19 @@ class InstalmentService {
         return null;
       }
 
+      // Asegurar que el cliente API está correctamente configurado
+      if (!_apiClient.dio.options.headers.containsKey('Authorization') ||
+          _apiClient.dio.options.headers['Authorization'] == null ||
+          !_apiClient.dio.options.headers['Authorization'].toString().contains(token)) {
+        
+        if (kDebugMode) {
+          print('Reestableciendo encabezados de autorización para la solicitud');
+        }
+        
+        // Establecer el encabezado de autorización manualmente
+        _apiClient.dio.options.headers['Authorization'] = 'Bearer $token';
+      }
+
       // Realizar la solicitud a la API
       final response = await _apiClient.dio.get(
         '/api/instalments/$instalmentId',
@@ -188,18 +202,41 @@ class InstalmentService {
       }
 
       if (response.statusCode == 200) {
-        // Verificar si la respuesta sigue el formato con status, message y data
-        if (response.data is Map && 
-            response.data.containsKey('status') && 
-            response.data['status'] == 'success' &&
-            response.data.containsKey('data')) {
-          
-          // Si la respuesta tiene el formato, extraer los datos
-          final data = response.data['data'];
-          return Instalment.fromJson(data);
-        } else if (response.data is Map && response.data.containsKey('instalment')) {
-          // Si la respuesta tiene el formato directo
-          return Instalment.fromJson(response.data['instalment']);
+        try {
+          // Verificar si la respuesta sigue el formato con status, message y data
+          if (response.data is Map && 
+              response.data.containsKey('status') && 
+              response.data['status'] == 'success' &&
+              response.data.containsKey('data')) {
+            
+            // Si la respuesta tiene el formato, extraer los datos
+            final data = response.data['data'];
+            if (kDebugMode) {
+              print('Procesando datos de cuota: $data');
+            }
+            return Instalment.fromJson(data);
+          } else if (response.data is Map && response.data.containsKey('instalment')) {
+            // Si la respuesta tiene el formato directo
+            final data = response.data['instalment'];
+            if (kDebugMode) {
+              print('Procesando datos de cuota (formato alternativo): $data');
+            }
+            return Instalment.fromJson(data);
+          } else {
+            if (kDebugMode) {
+              print('Formato de respuesta no reconocido: ${response.data}');
+            }
+          }
+        } catch (parseError) {
+          if (kDebugMode) {
+            print('Error al procesar datos de cuota: $parseError');
+            print('Datos recibidos: ${response.data}');
+          }
+        }
+      } else {
+        if (kDebugMode) {
+          print('Error en la respuesta: ${response.statusCode}');
+          print('Datos de error: ${response.data}');
         }
       }
 
@@ -207,6 +244,14 @@ class InstalmentService {
     } catch (e) {
       if (kDebugMode) {
         print('Error en getInstalmentById: $e');
+        if (e is DioException && e.response != null) {
+          print('ERROR DATA: ${e.response?.data}');
+          
+          // Si el error es 401 (No autorizado), podría ser un problema con el token
+          if (e.response?.statusCode == 401) {
+            print('Error de autorización. Posible token inválido o expirado.');
+          }
+        }
       }
       return null;
     }
@@ -506,11 +551,7 @@ class InstalmentService {
       }
 
       // Primero, obtener los detalles de la cuota para conseguir el invoice_id
-      final instalment = await getInstalment(int.parse(instalmentId), 
-        includeClient: true,
-        includeInvoice: true,
-        includePayments: true,
-      );
+      final instalment = await getInstalmentById(instalmentId);
       
       if (instalment == null) {
         return {'success': false, 'message': 'No se pudo obtener la información de la cuota'};
@@ -688,5 +729,191 @@ class InstalmentService {
       }
       return [];
     }
+  }
+  
+  // Generar código QR dinámico para pago de cuota
+  Future<Map<String, dynamic>> generateInstalmentQR(String instalmentId) async {
+    try {
+      // Verificar si hay un token disponible
+      String? token = _apiService.getCurrentToken();
+      
+      if (token == null || token.isEmpty) {
+        if (kDebugMode) {
+          print('No hay sesión activa para generar QR');
+        }
+        return {'success': false, 'message': 'No hay sesión activa'};
+      }
+      
+      // Asegurar que el cliente API está correctamente configurado
+      if (!_apiClient.dio.options.headers.containsKey('Authorization') ||
+          _apiClient.dio.options.headers['Authorization'] == null ||
+          !_apiClient.dio.options.headers['Authorization'].toString().contains(token)) {
+        
+        if (kDebugMode) {
+          print('Reestableciendo encabezados de autorización para la solicitud de QR');
+        }
+        
+        // Establecer el encabezado de autorización manualmente
+        _apiClient.dio.options.headers['Authorization'] = 'Bearer $token';
+      }
+      
+      // Obtener los detalles de la cuota
+      try {
+        final instalment = await getInstalmentById(instalmentId);
+        
+        if (instalment == null) {
+          if (kDebugMode) {
+            print('No se pudo obtener la información de la cuota ID: $instalmentId');
+          }
+          return {'success': false, 'message': 'No se encontró la cuota especificada'};
+        }
+        
+        // Obtener el monto pendiente de la cuota
+        final double amount = instalment.remainingAmount;
+        
+        if (kDebugMode) {
+          print('Generando QR para pago de cuota ID: $instalmentId, monto: $amount');
+        }
+
+        // Intentar con la ruta correcta según la documentación
+        try {
+          // Usar la ruta exacta para generar QR para cuotas
+          if (kDebugMode) {
+            print('Generando QR para cuota ID: $instalmentId con monto: $amount');
+          }
+          
+          final response = await _apiClient.dio.get(
+            '/api/payments/generate-instalment-qr/$instalmentId',
+            queryParameters: {
+              'amount': amount.toString(),
+            },
+            options: _apiService.getAuthOptions(),
+          );
+          
+          if (kDebugMode) {
+            print('*** Request ***');
+            print('uri: ${response.requestOptions.uri}');
+            print('method: ${response.requestOptions.method}');
+            print('responseType: ${response.requestOptions.responseType}');
+            print('followRedirects: ${response.requestOptions.followRedirects}');
+            print('persistentConnection: ${response.requestOptions.persistentConnection}');
+            print('connectTimeout: ${response.requestOptions.connectTimeout}');
+            print('sendTimeout: ${response.requestOptions.sendTimeout}');
+            print('receiveTimeout: ${response.requestOptions.receiveTimeout}');
+            print('receiveDataWhenStatusError: ${response.requestOptions.receiveDataWhenStatusError}');
+            print('extra: ${response.requestOptions.extra}');
+            print('headers:');
+            response.requestOptions.headers.forEach((key, value) {
+              print(' $key: $value');
+            });
+            print('data:');
+            print('${response.requestOptions.data}');
+            print('');
+          }
+          
+          if (response.statusCode == 200) {
+            if (kDebugMode) {
+              print('QR generado exitosamente: ${response.data}');
+            }
+            return _processQRResponse(response);
+          } else {
+            if (kDebugMode) {
+              print('Error al generar QR: ${response.statusCode} - ${response.data}');
+            }
+            return {'success': false, 'message': 'Error al generar QR: ${response.statusCode}'};
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('Error al generar QR: $e');
+            if (e is DioException && e.response != null) {
+              print('ERROR DATA: ${e.response?.data}');
+              
+              // Si el error es 401 (No autorizado), podría ser un problema con el token
+              if (e.response?.statusCode == 401) {
+                print('Error de autorización al generar QR. Posible token inválido o expirado.');
+                return {'success': false, 'message': 'Sesión expirada. Por favor, vuelva a iniciar sesión.'};
+              }
+            }
+          }
+          
+          return {'success': false, 'message': 'Error al generar el código QR: ${e.toString()}'};
+        }
+      } catch (instalmentError) {
+        if (kDebugMode) {
+          print('Error al obtener detalles de la cuota: $instalmentError');
+        }
+        return {'success': false, 'message': 'Error al obtener detalles de la cuota: ${instalmentError.toString()}'};
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error general al generar QR: $e');
+      }
+      
+      return {'success': false, 'message': 'Error al generar el código QR: ${e.toString()}'};
+    }
+  }
+  
+  // Método auxiliar para procesar la respuesta del QR
+  Map<String, dynamic> _processQRResponse(Response response) {
+    if (kDebugMode) {
+      print('Procesando respuesta QR: ${response.data}');
+    }
+    
+    if (response.data is Map) {
+      // Formato como en el ejemplo proporcionado
+      if (response.data.containsKey('success') && response.data['success'] == true) {
+        return {
+          'success': true,
+          'qr_data': response.data['qr_data'] ?? '',
+          'qr_image_url': response.data['qr_image_url'] ?? '',
+          'order_id': response.data['order_id'] ?? '',
+          'expiration': response.data['expiration'] ?? '',
+        };
+      } 
+      // Formato alternativo con 'status'
+      else if (response.data.containsKey('status') && response.data['status'] == 'success') {
+        final data = response.data.containsKey('data') ? response.data['data'] : response.data;
+        return {
+          'success': true,
+          'qr_data': data['qr_data'] ?? '',
+          'qr_image_url': data['qr_image_url'] ?? '',
+          'order_id': data['order_id'] ?? '',
+          'expiration': data['expiration'] ?? '',
+        };
+      } 
+      // Si la respuesta tiene directamente la URL del QR
+      else if (response.data.containsKey('qr_image_url') || response.data.containsKey('qr_data')) {
+        return {
+          'success': true,
+          'qr_data': response.data['qr_data'] ?? '',
+          'qr_image_url': response.data['qr_image_url'] ?? '',
+          'order_id': response.data['order_id'] ?? response.data['id'] ?? '',
+          'expiration': response.data['expiration'] ?? '',
+        };
+      }
+      // Si la respuesta tiene un mensaje de error
+      else if (response.data.containsKey('message') || response.data.containsKey('error')) {
+        final errorMessage = response.data['message'] ?? response.data['error'] ?? 'Error desconocido';
+        if (kDebugMode) {
+          print('Error en la respuesta del servidor: $errorMessage');
+        }
+        return {
+          'success': false,
+          'message': errorMessage,
+        };
+      }
+      // Caso para cualquier otro formato de respuesta
+      else {
+        if (kDebugMode) {
+          print('Formato de respuesta no reconocido: ${response.data}');
+        }
+        return {
+          'success': false,
+          'message': 'Formato de respuesta no reconocido',
+          'data': response.data,
+        };
+      }
+    }
+    return {'success': false, 'message': 'Formato de respuesta no reconocido'};
   }
 }

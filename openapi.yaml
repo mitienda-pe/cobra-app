@@ -15,7 +15,7 @@ info:
     La API utiliza autenticación basada en tokens y sigue el principio
     de filtrado por organización para garantizar que cada usuario solo acceda a los
     datos que le corresponden según su rol y asignaciones.
-  version: 1.4.0
+  version: 1.5.0
   contact:
     email: soporte@sistemacobranzas.com
 servers:
@@ -718,6 +718,10 @@ paths:
                 invoice_id:
                   type: integer
                   example: 123
+                instalment_id:
+                  type: integer
+                  description: ID de la cuota específica a la que se aplica el pago (opcional)
+                  example: 456
                 amount:
                   type: number
                   format: float
@@ -989,6 +993,83 @@ paths:
                         type: integer
         '401':
           description: No autorizado
+  /instalments/{id}:
+    get:
+      summary: Obtener detalle de una cuota específica
+      description: |
+        Obtiene la información detallada de una cuota específica, incluyendo datos completos 
+        de la factura relacionada, del cliente y su contacto.
+      tags:
+        - Cuotas
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: ID de la cuota
+          required: true
+          schema:
+            type: integer
+        - name: include_payments
+          in: query
+          description: Incluir pagos asociados a la cuota
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: include_invoice
+          in: query
+          description: Incluir información completa de la factura (para compatibilidad)
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: include_client
+          in: query
+          description: Incluir información completa del cliente (para compatibilidad)
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Detalle de la cuota
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  instalment:
+                    $ref: '#/components/schemas/Instalment'
+                  invoice:
+                    $ref: '#/components/schemas/Invoice'
+                    description: Solo presente si include_invoice=true
+                  client:
+                    $ref: '#/components/schemas/Client'
+                    description: Solo presente si include_client=true
+                  payments:
+                    type: array
+                    description: Solo presente si include_payments=true
+                    items:
+                      $ref: '#/components/schemas/Payment'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Acceso prohibido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Cuota no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /payments/search-invoices:
     get:
       summary: Buscar facturas para registrar pagos
@@ -1050,6 +1131,10 @@ paths:
                 invoice_id:
                   type: integer
                   example: 123
+                instalment_id:
+                  type: integer
+                  description: ID de la cuota específica a la que se aplica el pago (opcional)
+                  example: 456
                 amount:
                   type: number
                   format: float
@@ -1164,20 +1249,140 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '401':
-          description: No autorizado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '403':
-          description: Acceso prohibido
+          description: No tiene permisos para acceder a esta factura
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Factura no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /payments/generate-instalment-qr/{id}:
+    get:
+      summary: Generar código QR para pago de cuota
+      description: Genera un código QR dinámico para realizar un pago de una cuota específica mediante Ligo
+      tags:
+        - Pagos
+        - Ligo
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: ID de la cuota
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Código QR generado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  qr_data:
+                    type: string
+                    example: "00020101021226580014br.gov.bcb.pix0136123e4567-e89b-12d3-a456-426655440000"
+                  qr_image_url:
+                    type: string
+                    format: uri
+                    example: "https://api.ligo.pe/v1/qr/123456789"
+                  order_id:
+                    type: string
+                    example: "ORD-123456"
+                  instalment_id:
+                    type: integer
+                    example: 42
+                  invoice_id:
+                    type: integer
+                    example: 123
+                  expiration:
+                    type: string
+                    format: date-time
+                    example: "2025-03-28T12:30:00Z"
+        '400':
+          description: Error al generar código QR
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No tiene permisos para acceder a esta cuota
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Cuota no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /ligo/generate-static-qr/{id}:
+    get:
+      summary: Generar código QR estático para pago Ligo
+      description: |
+        Genera un código QR estático (sin monto predefinido) para realizar múltiples pagos mediante Ligo.
+        Este QR puede ser utilizado repetidamente y el usuario ingresa el monto al momento del pago.
+      tags:
+        - Pagos
+        - Ligo
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: ID o UUID de la organización
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Código QR estático generado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  organization_name:
+                    type: string
+                    example: "Empresa ABC"
+                  qr_data:
+                    type: string
+                    example: "00020101021226580014br.gov.bcb.pix0136123e4567-e89b-12d3-a456-426655440000"
+                  qr_image_url:
+                    type: string
+                    format: uri
+                    example: "https://api.ligo.pe/v1/qr/123456789"
+                  order_id:
+                    type: string
+                    example: "STATIC-123456"
+        '400':
+          description: Error al generar código QR estático
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No tiene permisos para acceder a esta organización
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Organización no encontrada
           content:
             application/json:
               schema:
@@ -1529,7 +1734,7 @@ components:
           example: cash
         reference_code:
           type: string
-          example: REF-12345
+          example: "REF-12345"
         payment_date:
           type: string
           format: date-time
@@ -1632,3 +1837,58 @@ components:
           type: string
           format: date-time
           example: 2025-03-19T10:00:00Z
+        client_business_name:
+          type: string
+          example: "Empresa ABC S.A."
+        client_document:
+          type: string
+          example: "20123456789"
+        client_contact_name:
+          type: string
+          example: "Juan Pérez"
+        client_address:
+          type: string
+          example: "Av. Principal 123, Lima"
+        client_phone:
+          type: string
+          example: "+51999309748"
+        client_email:
+          type: string
+          format: email
+          example: "contacto@empresaabc.com"
+        client_ubigeo:
+          type: string
+          example: "150101"
+        client_zip_code:
+          type: string
+          example: "15001"
+        client_latitude:
+          type: number
+          format: float
+          example: -12.046374
+        client_longitude:
+          type: number
+          format: float
+          example: -77.042793
+        client_uuid:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        invoice_uuid:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        invoice_concept:
+          type: string
+          example: "Venta de productos"
+        invoice_due_date:
+          type: string
+          format: date
+          example: "2025-04-30"
+        invoice_issue_date:
+          type: string
+          format: date
+          example: "2025-03-30"
+        invoice_instalment_count:
+          type: integer
+          example: 3

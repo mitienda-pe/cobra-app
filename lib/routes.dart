@@ -105,12 +105,16 @@ class AppRouter {
         GoRoute(
           path: '/payment-receipt',
           builder: (context, state) {
-            final Map<String, dynamic> args = state.extra as Map<String, dynamic>;
+            // Asegurarse de que state.extra sea un Map<String, dynamic>
+            final Map<String, dynamic> args = state.extra is Map<String, dynamic> 
+                ? state.extra as Map<String, dynamic> 
+                : <String, dynamic>{};
+                
             return PaymentReceiptScreen(
-              paymentData: args['paymentData'],
+              paymentData: args['paymentData'] ?? <String, dynamic>{'success': true, 'payment_id': 'N/A'},
               instalment: args['instalment'],
-              amount: args['amount'],
-              paymentMethod: args['paymentMethod'],
+              amount: args['amount'] ?? 0.0,
+              paymentMethod: args['paymentMethod'] ?? 'cash',
               reconciliationCode: args['reconciliationCode'],
               cashReceived: args['cashReceived'],
               cashChange: args['cashChange'],

@@ -58,7 +58,12 @@ class ApiService {
 
   // Método para eliminar el token de autenticación
   void clearAuthToken() {
+    // Eliminar el encabezado de autorización
     _apiClient.dio.options.headers.remove('Authorization');
+    
+    if (kDebugMode) {
+      print('Token de autenticación eliminado correctamente');
+    }
   }
 
   // Método para verificar si hay un token de autenticación configurado

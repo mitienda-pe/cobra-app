@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/instalment.dart';
 import '../services/instalment_service.dart';
 
@@ -25,12 +26,14 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
 
   bool _isLoading = true;
   bool _isProcessing = false;
+  bool _isGeneratingQR = false;
   Instalment? _instalment;
   String _paymentMethod = 'cash'; // Valores posibles: 'cash', 'transfer', 'pos', 'qr'
   double _amountToPay = 0.0;
   double _cashReceived = 0.0;
   double _cashChange = 0.0;
   String? _errorMessage;
+  Map<String, dynamic>? _qrData;
 
   @override
   void initState() {
@@ -204,7 +207,8 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
     }
   }
 
-  // Este método ya no se utilizará, pero lo mantenemos por ahora como referencia
+  // Este método ya no se utiliza
+  // ignore: unused_element
   Future<void> _showSuccessDialog(Map<String, dynamic> response) async {
     return showDialog<void>(
       context: context,
@@ -399,6 +403,163 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
       ],
     );
   }
+  
+  Widget _buildQRPaymentField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Pago con QR',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (_qrData != null) ...[  
+          // Mostrar el QR generado
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Column(
+              children: [
+                // Imagen del QR
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    _qrData!['qr_image_url'],
+                    height: 200,
+                    width: 200,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        height: 200,
+                        width: 200,
+                        color: Colors.grey.shade200,
+                        child: const Center(
+                          child: Icon(Icons.error_outline, size: 48),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Información del QR
+                Text(
+                  'Orden: ${_qrData!['order_id']}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Expira: ${_formatExpirationDate(_qrData!['expiration'])}',
+                  style: TextStyle(color: Colors.grey.shade700),
+                ),
+                const SizedBox(height: 16),
+                // Botón para abrir el QR en el navegador
+                OutlinedButton.icon(
+                  onPressed: () => _launchQRUrl(_qrData!['qr_image_url']),
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('Abrir en navegador'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _reconciliationCodeController,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.confirmation_number),
+              hintText: 'Ingrese el código de transacción QR',
+              labelText: 'Código de transacción',
+            ),
+          ),
+        ] else ...[  
+          // Botón para generar QR
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isGeneratingQR ? null : _generateQRCode,
+              icon: _isGeneratingQR 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) 
+                  : const Icon(Icons.qr_code),
+              label: Text(_isGeneratingQR ? 'Generando QR...' : 'Generar código QR'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Genera un código QR para que el cliente pueda pagar con su aplicación bancaria o billetera digital.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ],
+      ],
+    );
+  }
+  
+  String _formatExpirationDate(String dateString) {
+    try {
+      final DateTime date = DateTime.parse(dateString);
+      return DateFormat('dd/MM/yyyy HH:mm').format(date);
+    } catch (e) {
+      return dateString;
+    }
+  }
+  
+  Future<void> _launchQRUrl(String url) async {
+    try {
+      final Uri uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        throw 'No se pudo abrir $url';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al abrir URL: $e')),
+        );
+      }
+    }
+  }
+  
+  Future<void> _generateQRCode() async {
+    if (_instalment == null) return;
+    
+    setState(() {
+      _isGeneratingQR = true;
+      _errorMessage = null;
+    });
+    
+    try {
+      final result = await _instalmentService.generateInstalmentQR(_instalment!.id.toString());
+      
+      if (mounted) {
+        setState(() {
+          _isGeneratingQR = false;
+          
+          if (result['success'] == true) {
+            _qrData = result;
+          } else {
+            _errorMessage = result['message'] ?? 'Error al generar el código QR';
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isGeneratingQR = false;
+          _errorMessage = 'Error al generar el código QR: $e';
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -546,6 +707,8 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
                       // Campos específicos según el método de pago
                       if (_paymentMethod == 'cash')
                         _buildCashFields()
+                      else if (_paymentMethod == 'qr')
+                        _buildQRPaymentField()
                       else
                         _buildReconciliationCodeField(),
                       const SizedBox(height: 16),

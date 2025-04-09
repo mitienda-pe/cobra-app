@@ -7,10 +7,8 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
+import 'package:go_router/go_router.dart';
 import '../models/instalment.dart';
-import '../models/invoice.dart';
-import '../models/client.dart';
-import '../services/instalment_service.dart';
 
 class PaymentReceiptScreen extends StatefulWidget {
   final Map<String, dynamic> paymentData;
@@ -22,7 +20,7 @@ class PaymentReceiptScreen extends StatefulWidget {
   final double? cashChange;
 
   const PaymentReceiptScreen({
-    Key? key,
+    super.key,
     required this.paymentData,
     required this.instalment,
     required this.amount,
@@ -30,7 +28,7 @@ class PaymentReceiptScreen extends StatefulWidget {
     this.reconciliationCode,
     this.cashReceived,
     this.cashChange,
-  }) : super(key: key);
+  });
 
   @override
   State<PaymentReceiptScreen> createState() => _PaymentReceiptScreenState();
@@ -91,11 +89,9 @@ class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
         SnackBar(content: Text('Error al compartir: $e')),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSharing = false;
-        });
-      }
+      setState(() {
+        _isSharing = false;
+      });
     }
   }
 
@@ -236,9 +232,9 @@ class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
                       Text('Código de conciliación: ${widget.reconciliationCode}'),
                     if (widget.paymentMethod == 'cash') ...[
                       if (widget.cashReceived != null)
-                        Text('Efectivo recibido: ${currencyFormat.format(widget.cashReceived)}'),
+                        Text('Efectivo recibido: ${currencyFormat.format(widget.cashReceived!)}'),
                       if (widget.cashChange != null)
-                        Text('Cambio: ${currencyFormat.format(widget.cashChange)}'),
+                        Text('Cambio: ${currencyFormat.format(widget.cashChange!)}'),
                     ],
                     
                     // Pie de página
@@ -279,7 +275,8 @@ class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
                 ),
                 ElevatedButton.icon(
                   onPressed: () {
-                    Navigator.of(context).pop();
+                    // Navegar al listado de cuotas
+                    context.go('/instalments');
                   },
                   icon: const Icon(Icons.check_circle),
                   label: const Text('Finalizar'),

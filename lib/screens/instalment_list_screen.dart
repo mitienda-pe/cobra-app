@@ -41,6 +41,29 @@ class _InstalmentListScreenState extends State<InstalmentListScreen> {
     });
   }
   
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Este método se llama cuando el widget se inserta en el árbol
+    // y cuando sus dependencias cambian (incluyendo cuando se navega de vuelta a esta pantalla)
+  }
+  
+  // Método para refrescar la lista cuando se regresa a esta pantalla
+  @override
+  void didUpdateWidget(InstalmentListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Este método se llama cuando el widget se reconstruye
+  }
+  
+  // Método para detectar cuando la pantalla vuelve a estar visible
+  @override
+  void activate() {
+    super.activate();
+    // Este método se llama cuando el widget se vuelve a activar en el árbol
+    // Es ideal para refrescar datos cuando se regresa a esta pantalla
+    _loadInstalments();
+  }
+  
   Future<void> _loadInstalments() async {
     setState(() => _isLoading = true);
     

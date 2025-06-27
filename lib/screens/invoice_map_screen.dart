@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/invoice_account.dart';
 import '../providers/invoice_account_provider.dart';
+import '../utils/logger.dart';
 
 enum SortOption {
   status,
@@ -74,11 +75,11 @@ class _InvoiceMapScreenState extends State<InvoiceMapScreen> {
         }
       } catch (e) {
         // Error al obtener la ubicación
-        print('Error al obtener la ubicación: $e');
+        Logger.error('Error al obtener la ubicación', e);
       }
     } catch (e) {
       // Error general con el servicio de ubicación
-      print('Error con el servicio de ubicación: $e');
+      Logger.error('Error con el servicio de ubicación', e);
     }
   }
   
@@ -275,7 +276,7 @@ class _InvoiceMapScreenState extends State<InvoiceMapScreen> {
                                           _selectedStatus = null;
                                         });
                                       },
-                                      backgroundColor: _getStatusColor(_selectedStatus!).withOpacity(0.2),
+                                      backgroundColor: _getStatusColor(_selectedStatus!).withAlpha(51),  // 0.2 * 255 = 51
                                       side: BorderSide(color: _getStatusColor(_selectedStatus!)),
                                     ),
                                   ),
@@ -288,7 +289,7 @@ class _InvoiceMapScreenState extends State<InvoiceMapScreen> {
                                         _hidePaidAccounts = false;
                                       });
                                     },
-                                    backgroundColor: Colors.grey.withOpacity(0.2),
+                                    backgroundColor: Colors.grey.withAlpha(51),  // 0.2 * 255 = 51
                                     side: const BorderSide(color: Colors.grey),
                                   ),
                               ],
@@ -384,7 +385,7 @@ class _InvoiceMapScreenState extends State<InvoiceMapScreen> {
               return aDistance.compareTo(bDistance);
             } catch (e) {
               // Si hay un error al calcular la distancia, mantener el orden original
-              print('Error al calcular distancia: $e');
+              Logger.error('Error al calcular distancia', e);
               return 0;
             }
           });
@@ -437,7 +438,7 @@ class _InvoiceMapScreenState extends State<InvoiceMapScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withAlpha(51),  // 0.2 * 255 = 51
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),

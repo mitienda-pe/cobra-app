@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/instalment.dart';
 import '../services/instalment_service.dart';
+import '../utils/currency_formatter.dart';
 
 class InstalmentPaymentScreen extends StatefulWidget {
   final int instalmentId;
@@ -363,11 +364,10 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
               ),
             ),
             Text(
-              NumberFormat.currency(
-                locale: 'es_AR',
-                symbol: '\$',
-                decimalDigits: 2,
-              ).format(_cashChange),
+              CurrencyFormatter.formatAmount(
+                _cashChange,
+                _instalment?.invoice?.currency,
+              ),
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
@@ -563,10 +563,8 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormat = NumberFormat.currency(
-      locale: 'es_AR',
-      symbol: '\$',
-      decimalDigits: 2,
+    final currencyFormat = CurrencyFormatter.getCurrencyFormat(
+      _instalment?.invoice?.currency,
     );
 
     return Scaffold(

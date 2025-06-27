@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import '../models/payment.dart';
 import '../providers/invoice_account_provider.dart';
 import '../models/invoice_account.dart';
+import '../utils/currency_formatter.dart';
+import '../utils/logger.dart';
 
 class RegisterPaymentScreen extends StatefulWidget {
   final String invoiceAccountId;
@@ -25,12 +27,8 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
   final _reconciliationCodeController = TextEditingController();
   final _cashReceivedController = TextEditingController();
   
-  // Formato para moneda (S/ 0.00)
-  final currencyFormat = NumberFormat.currency(
-    locale: 'es_PE',
-    symbol: 'S/ ',
-    decimalDigits: 2,
-  );
+  // Formato para moneda (se determinará según la moneda de la factura)
+  late NumberFormat currencyFormat;
   
   PaymentMethod _selectedMethod = PaymentMethod.cash;
   double _cashChange = 0.0;
@@ -49,6 +47,10 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
           final invoiceAccountProvider = Provider.of<InvoiceAccountProvider>(context, listen: false);
           final invoiceAccount = invoiceAccountProvider.getInvoiceAccountById(widget.invoiceAccountId);
           
+          // Inicializar el formateador de moneda con la moneda correcta
+          // Como InvoiceAccount no tiene directamente el campo currency, usamos el valor predeterminado
+          currencyFormat = CurrencyFormatter.getCurrencyFormat(null);
+          
           // Inicializar el monto a pagar con el monto pendiente
           _amountController.text = invoiceAccount.remainingAmount.toStringAsFixed(2);
           
@@ -59,7 +61,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
           _updateRemainingAmount(invoiceAccount);
           _updateCashChange();
         } catch (e) {
-          print('Error al inicializar pantalla de pagos: $e');
+          Logger.error('Error al inicializar pantalla de pagos', e);
           // No hacer nada más, simplemente evitar que la app se bloquee
         }
       }
@@ -207,9 +209,9 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
+                  color: Colors.blue.withAlpha(26),  // 0.1 * 255 = 25.5 ≈ 26
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                  border: Border.all(color: Colors.blue.withAlpha(77)),  // 0.3 * 255 = 76.5 ≈ 77
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -487,13 +489,15 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
                 onChanged: (_) {
                   if (mounted && !_isProcessingInput) {
                     _isProcessingInput = true;
+                    // Capture provider reference before async gap
+                    final provider = Provider.of<InvoiceAccountProvider>(context, listen: false);
+                    
                     // Usar Future.delayed para reducir la frecuencia de actualizaciones
                     Future.delayed(const Duration(milliseconds: 300), () {
                       if (mounted) {
                         _updateCashChange();
                         _updateRemainingAmount(
-                          Provider.of<InvoiceAccountProvider>(context, listen: false)
-                              .getInvoiceAccountById(widget.invoiceAccountId)
+                          provider.getInvoiceAccountById(widget.invoiceAccountId)
                         );
                       }
                       _isProcessingInput = false;
@@ -599,7 +603,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
           margin: const EdgeInsets.symmetric(horizontal: 4),
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           decoration: BoxDecoration(
-            color: isSelected ? Theme.of(context).primaryColor.withOpacity(0.1) : Colors.transparent,
+            color: isSelected ? Theme.of(context).primaryColor.withAlpha(26) : Colors.transparent,  // 0.1 * 255 = 25.5 ≈ 26
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isSelected ? Theme.of(context).primaryColor : Colors.grey.shade300,
@@ -652,7 +656,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
           (cashReceived > amount ? cashReceived - amount : 0.0) : 0.0;
       });
     } catch (e) {
-      print('Error al actualizar cambio: $e');
+      Logger.error('Error al actualizar cambio', e);
     }
   }
   
@@ -667,7 +671,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
         _remainingAfterPayment = newRemainingAmount;
       });
     } catch (e) {
-      print('Error al actualizar monto restante: $e');
+      Logger.error('Error al actualizar monto restante', e);
     }
   }
   
@@ -682,6 +686,9 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
       
       try {
         final amount = double.parse(_amountController.text);
+        // Store context reference before async gap
+        final scaffoldMessenger = ScaffoldMessenger.of(context);
+        final navigator = Navigator.of(context);
         final invoiceAccountProvider = Provider.of<InvoiceAccountProvider>(context, listen: false);
         
         // Crear objeto de pago según el método
@@ -705,7 +712,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
         
         // Mostrar mensaje de éxito
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          scaffoldMessenger.showSnackBar(
             const SnackBar(
               content: Text('Pago registrado con éxito'),
               backgroundColor: Colors.green,
@@ -713,13 +720,18 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
           );
           
           // Volver a la pantalla anterior
-          Navigator.of(context).pop();
+          navigator.pop();
         }
       } catch (e) {
         // Manejar errores
-        print('Error al registrar el pago: $e');
+        Logger.error('Error al registrar el pago', e);
+        
+        // Capture ScaffoldMessenger outside of mounted check
+        final scaffoldMessenger = ScaffoldMessenger.of(context);
+        
+        // Then check if still mounted before showing the snackbar
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          scaffoldMessenger.showSnackBar(
             SnackBar(
               content: Text('Error al registrar el pago: ${e.toString()}'),
               backgroundColor: Colors.red,

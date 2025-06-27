@@ -8,6 +8,8 @@ import '../models/payment.dart';
 import '../models/invoice.dart';
 import '../providers/invoice_account_provider.dart';
 import '../services/api_service.dart';
+import '../utils/currency_formatter.dart';
+import '../utils/logger.dart';
 
 class InvoiceDetailScreen extends StatefulWidget {
   final String invoiceAccountId;
@@ -18,10 +20,10 @@ class InvoiceDetailScreen extends StatefulWidget {
   });
 
   @override
-  _InvoiceDetailScreenState createState() => _InvoiceDetailScreenState();
+  InvoiceDetailScreenState createState() => InvoiceDetailScreenState();
 }
 
-class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
+class InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   final ApiService _apiService = ApiService();
   List<Invoice>? _invoices;
   bool _isLoading = false;
@@ -49,7 +51,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       final accountProvider = Provider.of<InvoiceAccountProvider>(context, listen: false);
       final account = accountProvider.getInvoiceAccountById(widget.invoiceAccountId);
       
-      print('Solicitando facturas para cliente UUID: ${account.customer.id} con include_clients=true');
+      Logger.info('Solicitando facturas para cliente UUID: ${account.customer.id} con include_clients=true');
       
       final response = await _apiService.getInvoices(
         clientUuid: account.customer.id, // Usar UUID en lugar de ID numérico
@@ -57,20 +59,20 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       );
 
       if (response != null) {
-        print('Facturas obtenidas: ${response.invoices.length}');
+        Logger.info('Facturas obtenidas: ${response.invoices.length}');
         
         final filteredInvoices = response.invoices.where((invoice) {
-          return invoice.clientId == account.customer.id;
+          return invoice.clientId.toString() == account.customer.id.toString();
         }).toList();
         
-        print('Facturas filtradas del mismo cliente: ${filteredInvoices.length}');
+        Logger.info('Facturas filtradas del mismo cliente: ${filteredInvoices.length}');
         
         if (filteredInvoices.isNotEmpty) {
           final firstInvoice = filteredInvoices.first;
-          print('Primera factura - ID: ${firstInvoice.id}, Número: ${firstInvoice.invoiceNumber}');
-          print('Cliente en factura: ${firstInvoice.client != null ? "SÍ" : "NO"}');
+          Logger.info('Primera factura - ID: ${firstInvoice.id}, Número: ${firstInvoice.invoiceNumber}');
+          Logger.info('Cliente en factura: ${firstInvoice.client != null ? "SÍ" : "NO"}');
           if (firstInvoice.client != null) {
-            print('Datos del cliente: ID=${firstInvoice.client!.id}, Nombre=${firstInvoice.client!.businessName}');
+            Logger.info('Datos del cliente: ID=${firstInvoice.client!.id}, Nombre=${firstInvoice.client!.businessName}');
           }
         }
         
@@ -79,7 +81,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           _isLoading = false;
         });
       } else {
-        print('No se recibió respuesta de facturas');
+        Logger.warning('No se recibió respuesta de facturas');
         setState(() {
           _invoices = [];
           _isLoading = false;
@@ -102,10 +104,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     final account = accountProvider.getInvoiceAccountById(widget.invoiceAccountId);
     
     final dateFormat = DateFormat('dd/MM/yyyy');
-    final currencyFormat = NumberFormat.currency(
-      symbol: '\$',
-      decimalDigits: 2,
-    );
+    final invoice = _invoices?.isNotEmpty == true ? _invoices!.first : null;
+    final currencyFormat = CurrencyFormatter.getCurrencyFormat(invoice?.currency);
     
     return Scaffold(
       appBar: AppBar(
@@ -143,7 +143,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                     // Información del cliente
                     Container(
                       padding: const EdgeInsets.all(16),
-                      color: Theme.of(context).primaryColor.withOpacity(0.1),
+                      color: Theme.of(context).primaryColor.withAlpha(26), // 0.1 * 255 = 25.5 ≈ 26
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -360,7 +360,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                               itemCount: account.payments.length,
                               itemBuilder: (context, index) {
                                 final payment = account.payments[index];
-                                return _buildPaymentItem(payment, dateFormat, currencyFormat);
+                                return _buildPaymentItem(payment, dateFormat, currencyFormat, invoice?.currency);
                               },
                             ),
                           ],
@@ -388,7 +388,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                             itemBuilder: (context, index) {
                               final invoice = _invoices![index];
                               // No mostrar la factura actual en la lista de facturas relacionadas
-                              if (invoice.id == account.id) {
+                              if (invoice.id.toString() == account.id.toString()) {
                                 return const SizedBox.shrink();
                               }
                               return _buildInvoiceItem(invoice, dateFormat, currencyFormat, false);
@@ -453,7 +453,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         vertical: 4,
       ),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
+        color: color.withAlpha(51), // 0.2 * 255 = 51
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: color,
@@ -475,6 +475,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     Payment payment,
     DateFormat dateFormat,
     NumberFormat currencyFormat,
+    [String? currency]
   ) {
     IconData methodIcon;
     String methodName;
@@ -509,7 +510,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: Colors.green.withOpacity(0.2),
+              backgroundColor: Colors.green.withAlpha(51), // 0.2 * 255 = 51
               radius: 20,
               child: Icon(
                 methodIcon,
@@ -567,6 +568,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     NumberFormat currencyFormat,
     [bool showPayButton = false]
   ) {
+    // Use the invoice's currency for formatting
+    final invoiceCurrencyFormat = CurrencyFormatter.getCurrencyFormat(invoice.currency);
     Color statusColor;
     String statusText;
     
@@ -626,7 +629,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.2),
+                      color: statusColor.withAlpha(51), // 0.2 * 255 = 51
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: statusColor,
@@ -684,7 +687,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                         ),
                       ),
                       Text(
-                        currencyFormat.format(invoice.amount),
+                        invoiceCurrencyFormat.format(invoice.amount),
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -718,7 +721,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                           ),
                         ),
                         Text(
-                          currencyFormat.format(invoice.paymentsAmount),
+                          invoiceCurrencyFormat.format(invoice.paymentsAmount),
                           style: const TextStyle(
                             color: Colors.green,
                             fontWeight: FontWeight.bold,
@@ -739,7 +742,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     Text(
-                      'Pendiente: ${currencyFormat.format(invoice.remainingAmount)}',
+                      'Pendiente: ${invoiceCurrencyFormat.format(invoice.remainingAmount)}',
                       style: TextStyle(
                         color: Colors.grey[600],
                         fontSize: 12,

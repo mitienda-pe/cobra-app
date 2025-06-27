@@ -6,13 +6,10 @@ import 'package:geolocator/geolocator.dart';
 import '../models/invoice_account.dart';
 import '../providers/invoice_account_provider.dart';
 import '../providers/auth_provider.dart';
+import '../utils/currency_formatter.dart';
+import '../utils/logger.dart';
 
-enum SortOption {
-  status,
-  expirationDate,
-  amount,
-  distance,
-}
+enum SortOption { status, expirationDate, amount, distance }
 
 class InvoiceListScreen extends StatefulWidget {
   const InvoiceListScreen({super.key});
@@ -85,11 +82,11 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
         }
       } catch (e) {
         // Error al obtener la ubicación
-        print('Error al obtener la ubicación: $e');
+        Logger.error('Error al obtener la ubicación', e);
       }
     } catch (e) {
       // Error general con el servicio de ubicación
-      print('Error con el servicio de ubicación: $e');
+      Logger.error('Error con el servicio de ubicación', e);
     }
   }
 
@@ -99,12 +96,13 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
       appBar: AppBar(
         title: const Text('Facturas'),
         leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () {
-              Scaffold.of(context).openDrawer();
-            },
-          ),
+          builder:
+              (context) => IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () {
+                  Scaffold.of(context).openDrawer();
+                },
+              ),
         ),
         actions: [
           IconButton(
@@ -201,30 +199,41 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
               title: const Text('Cerrar Sesión'),
               onTap: () async {
                 // Mostrar diálogo de confirmación
-                final shouldLogout = await showDialog<bool>(
+                final shouldLogout =
+                    await showDialog<bool>(
                       context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Cerrar Sesión'),
-                        content: const Text(
-                            '¿Estás seguro de que deseas cerrar sesión?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('Cancelar'),
+                      builder:
+                          (context) => AlertDialog(
+                            title: const Text('Cerrar Sesión'),
+                            content: const Text(
+                              '¿Estás seguro de que deseas cerrar sesión?',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancelar'),
+                              ),
+                              ElevatedButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text('Cerrar Sesión'),
+                              ),
+                            ],
                           ),
-                          ElevatedButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            child: const Text('Cerrar Sesión'),
-                          ),
-                        ],
-                      ),
                     ) ??
                     false;
 
                 if (shouldLogout) {
-                  Navigator.pop(context); // Cerrar el drawer
-                  final authProvider =
-                      Provider.of<AuthProvider>(context, listen: false);
+                  // Store all context references before any async operations
+                  final navigator = Navigator.of(context);
+                  final authProvider = Provider.of<AuthProvider>(
+                    context,
+                    listen: false,
+                  );
+                  
+                  // Execute synchronous operations first
+                  navigator.pop(); // Cerrar el drawer
+                  
+                  // Then perform async operations - no context usage after this point
                   await authProvider.logout();
                   // La redirección a la pantalla de login se manejará automáticamente
                   // a través del redirect configurado en el GoRouter
@@ -275,30 +284,33 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
           final accounts = accountProvider.invoiceAccounts;
 
           if (accounts.isEmpty) {
-            return const Center(
-              child: Text('No hay facturas disponibles'),
-            );
+            return const Center(child: Text('No hay facturas disponibles'));
           }
 
           // Filtrar cuentas por estado si hay un filtro seleccionado
-          List<InvoiceAccount> filteredAccounts =
-              List<InvoiceAccount>.from(accounts);
+          List<InvoiceAccount> filteredAccounts = List<InvoiceAccount>.from(
+            accounts,
+          );
 
           // Ocultar cuentas pagadas si la opción está activada
           if (_hidePaidAccounts) {
-            filteredAccounts = filteredAccounts
-                .where((account) => account.status != InvoiceAccountStatus.paid)
-                .toList();
+            filteredAccounts =
+                filteredAccounts
+                    .where(
+                      (account) => account.status != InvoiceAccountStatus.paid,
+                    )
+                    .toList();
           }
 
           if (_selectedStatus != null) {
-            filteredAccounts = filteredAccounts.where((account) {
-              if (_selectedStatus == InvoiceAccountStatus.expired) {
-                return account.isExpired &&
-                    account.status != InvoiceAccountStatus.paid;
-              }
-              return account.status == _selectedStatus;
-            }).toList();
+            filteredAccounts =
+                filteredAccounts.where((account) {
+                  if (_selectedStatus == InvoiceAccountStatus.expired) {
+                    return account.isExpired &&
+                        account.status != InvoiceAccountStatus.paid;
+                  }
+                  return account.status == _selectedStatus;
+                }).toList();
           }
 
           // Ordenar cuentas según la opción seleccionada
@@ -381,10 +393,12 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                 });
                                 _reloadInvoicesWithFilters();
                               },
-                              backgroundColor: _getStatusColor(_selectedStatus!)
-                                  .withOpacity(0.2),
+                              backgroundColor: _getStatusColor(
+                                _selectedStatus!,
+                              ).withAlpha(51), // 0.2 * 255 = 51
                               side: BorderSide(
-                                  color: _getStatusColor(_selectedStatus!)),
+                                color: _getStatusColor(_selectedStatus!),
+                              ),
                             ),
                           if (_hidePaidAccounts)
                             Chip(
@@ -396,13 +410,14 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                 });
                                 _reloadInvoicesWithFilters();
                               },
-                              backgroundColor: Colors.grey.withOpacity(0.2),
+                              backgroundColor: Colors.grey.withAlpha(51), // 0.2 * 255 = 51
                               side: const BorderSide(color: Colors.grey),
                             ),
                           if (_startDate != null)
                             Chip(
                               label: Text(
-                                  'Desde: ${DateFormat('dd/MM/yyyy').format(_startDate!)}'),
+                                'Desde: ${DateFormat('dd/MM/yyyy').format(_startDate!)}',
+                              ),
                               deleteIcon: const Icon(Icons.close, size: 18),
                               onDeleted: () {
                                 setState(() {
@@ -411,13 +426,14 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                 });
                                 _reloadInvoicesWithFilters();
                               },
-                              backgroundColor: Colors.blue.withOpacity(0.2),
+                              backgroundColor: Colors.blue.withAlpha(51), // 0.2 * 255 = 51
                               side: const BorderSide(color: Colors.blue),
                             ),
                           if (_endDate != null)
                             Chip(
                               label: Text(
-                                  'Hasta: ${DateFormat('dd/MM/yyyy').format(_endDate!)}'),
+                                'Hasta: ${DateFormat('dd/MM/yyyy').format(_endDate!)}',
+                              ),
                               deleteIcon: const Icon(Icons.close, size: 18),
                               onDeleted: () {
                                 setState(() {
@@ -426,7 +442,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                 });
                                 _reloadInvoicesWithFilters();
                               },
-                              backgroundColor: Colors.blue.withOpacity(0.2),
+                              backgroundColor: Colors.blue.withAlpha(51), // 0.2 * 255 = 51
                               side: const BorderSide(color: Colors.blue),
                             ),
                         ],
@@ -437,8 +453,10 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
 
               // Mostrar información de ordenamiento
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 color: Colors.grey[100],
                 child: Row(
                   children: [
@@ -452,9 +470,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                     const Spacer(),
                     Text(
                       '${filteredAccounts.length} facturas',
-                      style: TextStyle(
-                        color: Colors.grey[700],
-                      ),
+                      style: TextStyle(color: Colors.grey[700]),
                     ),
                   ],
                 ),
@@ -472,8 +488,9 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       return InvoiceListItem(
                         account: account,
                         onTap: () {
-                          GoRouter.of(context)
-                              .go('/invoice-detail/${account.id}');
+                          GoRouter.of(
+                            context,
+                          ).go('/invoice-detail/${account.id}');
                         },
                       );
                     },
@@ -557,7 +574,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
               return aDistance.compareTo(bDistance);
             } catch (e) {
               // Si hay un error al calcular la distancia, mantener el orden original
-              print('Error al calcular distancia: $e');
+              Logger.error('Error al calcular distancia', e);
               return 0;
             }
           });
@@ -611,168 +628,206 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   void _showFilterDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Filtrar Facturas'),
-        content: StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Estado:',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  _buildFilterOption(context, null, 'Todos'),
-                  _buildFilterOption(
-                      context, InvoiceAccountStatus.pending, 'Pendientes'),
-                  _buildFilterOption(context,
-                      InvoiceAccountStatus.partiallyPaid, 'Pago Parcial'),
-                  _buildFilterOption(
-                      context, InvoiceAccountStatus.paid, 'Pagados'),
-                  _buildFilterOption(
-                      context, InvoiceAccountStatus.expired, 'Vencidos'),
-                  const Divider(),
-                  SwitchListTile(
-                    title: const Text('Ocultar facturas pagadas'),
-                    value: _hidePaidAccounts,
-                    onChanged: (value) {
-                      setStateDialog(() {
-                        setState(() {
-                          _hidePaidAccounts = value;
-                        });
-                      });
-                    },
-                  ),
-                  const Divider(),
-                  const Text('Rango de fechas:',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Row(
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Filtrar Facturas'),
+            content: StatefulBuilder(
+              builder: (context, setStateDialog) {
+                return SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            final DateTime? picked = await showDatePicker(
-                              context: context,
-                              initialDate: _startDate ?? DateTime.now(),
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime(2025),
-                            );
-                            if (picked != null) {
-                              setStateDialog(() {
-                                setState(() {
-                                  _startDate = picked;
-                                  _dateStart =
-                                      DateFormat('yyyy-MM-dd').format(picked);
-                                });
-                              });
-                            }
-                          },
-                          child: Text(_startDate != null
-                              ? DateFormat('dd/MM/yyyy').format(_startDate!)
-                              : 'Fecha Inicio'),
-                        ),
+                      const Text(
+                        'Estado:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            final DateTime? picked = await showDatePicker(
-                              context: context,
-                              initialDate: _endDate ?? DateTime.now(),
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime(2025),
-                            );
-                            if (picked != null) {
-                              setStateDialog(() {
-                                setState(() {
-                                  _endDate = picked;
-                                  _dateEnd =
-                                      DateFormat('yyyy-MM-dd').format(picked);
-                                });
-                              });
-                            }
-                          },
-                          child: Text(_endDate != null
-                              ? DateFormat('dd/MM/yyyy').format(_endDate!)
-                              : 'Fecha Fin'),
-                        ),
+                      _buildFilterOption(context, null, 'Todos'),
+                      _buildFilterOption(
+                        context,
+                        InvoiceAccountStatus.pending,
+                        'Pendientes',
+                      ),
+                      _buildFilterOption(
+                        context,
+                        InvoiceAccountStatus.partiallyPaid,
+                        'Pago Parcial',
+                      ),
+                      _buildFilterOption(
+                        context,
+                        InvoiceAccountStatus.paid,
+                        'Pagados',
+                      ),
+                      _buildFilterOption(
+                        context,
+                        InvoiceAccountStatus.expired,
+                        'Vencidos',
+                      ),
+                      const Divider(),
+                      SwitchListTile(
+                        title: const Text('Ocultar facturas pagadas'),
+                        value: _hidePaidAccounts,
+                        onChanged: (value) {
+                          setStateDialog(() {
+                            setState(() {
+                              _hidePaidAccounts = value;
+                            });
+                          });
+                        },
+                      ),
+                      const Divider(),
+                      const Text(
+                        'Rango de fechas:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () async {
+                                final DateTime? picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: _startDate ?? DateTime.now(),
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime(2025),
+                                );
+                                if (picked != null) {
+                                  setStateDialog(() {
+                                    setState(() {
+                                      _startDate = picked;
+                                      _dateStart = DateFormat(
+                                        'yyyy-MM-dd',
+                                      ).format(picked);
+                                    });
+                                  });
+                                }
+                              },
+                              child: Text(
+                                _startDate != null
+                                    ? DateFormat(
+                                      'dd/MM/yyyy',
+                                    ).format(_startDate!)
+                                    : 'Fecha Inicio',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () async {
+                                final DateTime? picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: _endDate ?? DateTime.now(),
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime(2025),
+                                );
+                                if (picked != null) {
+                                  setStateDialog(() {
+                                    setState(() {
+                                      _endDate = picked;
+                                      _dateEnd = DateFormat(
+                                        'yyyy-MM-dd',
+                                      ).format(picked);
+                                    });
+                                  });
+                                }
+                              },
+                              child: Text(
+                                _endDate != null
+                                    ? DateFormat('dd/MM/yyyy').format(_endDate!)
+                                    : 'Fecha Fin',
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                );
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _selectedStatus = null;
+                    _hidePaidAccounts = false;
+                    _dateStart = null;
+                    _dateEnd = null;
+                    _startDate = null;
+                    _endDate = null;
+                  });
+                  Navigator.of(context).pop();
+                  _reloadInvoicesWithFilters();
+                },
+                child: const Text('Limpiar'),
               ),
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _selectedStatus = null;
-                _hidePaidAccounts = false;
-                _dateStart = null;
-                _dateEnd = null;
-                _startDate = null;
-                _endDate = null;
-              });
-              Navigator.of(context).pop();
-              _reloadInvoicesWithFilters();
-            },
-            child: const Text('Limpiar'),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _reloadInvoicesWithFilters();
+                },
+                child: const Text('Aplicar'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _reloadInvoicesWithFilters();
-            },
-            child: const Text('Aplicar'),
-          ),
-        ],
-      ),
     );
   }
 
   void _showSortDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Ordenar por'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildSortOption(context, SortOption.status, 'Estado'),
-            _buildSortOption(context, SortOption.expirationDate,
-                'Fecha de vencimiento (menor a mayor)'),
-            _buildSortOption(
-                context, SortOption.amount, 'Monto (mayor a menor)'),
-            _buildSortOption(context, SortOption.distance,
-                'Distancia (más cercano primero)'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancelar'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Ordenar por'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildSortOption(context, SortOption.status, 'Estado'),
+                _buildSortOption(
+                  context,
+                  SortOption.expirationDate,
+                  'Fecha de vencimiento (menor a mayor)',
+                ),
+                _buildSortOption(
+                  context,
+                  SortOption.amount,
+                  'Monto (mayor a menor)',
+                ),
+                _buildSortOption(
+                  context,
+                  SortOption.distance,
+                  'Distancia (más cercano primero)',
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  setState(() {}); // Forzar reconstrucción
+                },
+                child: const Text('Aplicar'),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              setState(() {}); // Forzar reconstrucción
-            },
-            child: const Text('Aplicar'),
-          ),
-        ],
-      ),
     );
   }
 
   Widget _buildFilterOption(
-      BuildContext context, InvoiceAccountStatus? status, String label) {
+    BuildContext context,
+    InvoiceAccountStatus? status,
+    String label,
+  ) {
     return ListTile(
       title: Text(label),
       leading: Radio<InvoiceAccountStatus?>(
@@ -793,7 +848,10 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   }
 
   Widget _buildSortOption(
-      BuildContext context, SortOption option, String label) {
+    BuildContext context,
+    SortOption option,
+    String label,
+  ) {
     return ListTile(
       title: Text(label),
       leading: Radio<SortOption>(
@@ -814,8 +872,10 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   }
 
   Future<void> _reloadInvoicesWithFilters() async {
-    final accountProvider =
-        Provider.of<InvoiceAccountProvider>(context, listen: false);
+    final accountProvider = Provider.of<InvoiceAccountProvider>(
+      context,
+      listen: false,
+    );
 
     // Convertir el estado seleccionado al formato esperado por la API
     String? apiStatus;
@@ -847,9 +907,11 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   // Método para forzar la recarga de datos
   Future<void> _forceReloadInvoices() async {
     if (!mounted) return;
-    
-    final accountProvider =
-        Provider.of<InvoiceAccountProvider>(context, listen: false);
+
+    final accountProvider = Provider.of<InvoiceAccountProvider>(
+      context,
+      listen: false,
+    );
 
     // Convertir el estado seleccionado al formato esperado por la API
     String? apiStatus;
@@ -888,9 +950,11 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
         forceRefresh: true, // Forzar la recarga de datos
       );
     } catch (e) {
-      print('Error al recargar facturas: $e');
+      Logger.error('Error al recargar facturas', e);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        // Use a local variable to avoid BuildContext across async gap
+        final scaffoldMessenger = ScaffoldMessenger.of(context);
+        scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text('Error al cargar datos: ${e.toString()}'),
             backgroundColor: Colors.red,
@@ -940,17 +1004,13 @@ class InvoiceListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dateFormat = DateFormat('dd/MM/yyyy');
-    final currencyFormat = NumberFormat.currency(
-      symbol: '\$',
-      decimalDigits: 2,
-    );
+    // Usamos el formato de moneda predeterminado ya que InvoiceAccount no tiene la propiedad currency
+    final currencyFormat = CurrencyFormatter.getCurrencyFormat(null);
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
       elevation: 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
@@ -978,12 +1038,9 @@ class InvoiceListItem extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: _getStatusColor().withOpacity(0.2),
+                      color: _getStatusColor().withAlpha(51), // 0.2 * 255 = 51
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: _getStatusColor(),
-                        width: 1,
-                      ),
+                      border: Border.all(color: _getStatusColor(), width: 1),
                     ),
                     child: Text(
                       _getStatusText(),
@@ -1022,18 +1079,16 @@ class InvoiceListItem extends StatelessWidget {
                     children: [
                       Text(
                         'Vence:',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
                       ),
                       Text(
                         dateFormat.format(account.expirationDate),
                         style: TextStyle(
                           color: account.isExpired ? Colors.red : Colors.black,
-                          fontWeight: account.isExpired
-                              ? FontWeight.bold
-                              : FontWeight.normal,
+                          fontWeight:
+                              account.isExpired
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                         ),
                       ),
                     ],
@@ -1043,16 +1098,11 @@ class InvoiceListItem extends StatelessWidget {
                     children: [
                       Text(
                         'Monto:',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
                       ),
                       Text(
                         currencyFormat.format(account.totalAmount),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -1071,17 +1121,11 @@ class InvoiceListItem extends StatelessWidget {
                   children: [
                     Text(
                       'Pagado: ${currencyFormat.format(account.paidAmount)}',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
                     ),
                     Text(
                       'Pendiente: ${currencyFormat.format(account.remainingAmount)}',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
                     ),
                   ],
                 ),

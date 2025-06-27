@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import '../models/instalment.dart';
 import '../services/instalment_service.dart';
 import '../providers/auth_provider.dart';
+import '../utils/currency_formatter.dart';
+import '../utils/logger.dart';
 
 enum InstalmentSortOption {
   dueDate,
@@ -76,30 +78,30 @@ class _InstalmentListScreenState extends State<InstalmentListScreen> {
       // Debug first instalment to see where invoice number is coming from
       if (instalments.isNotEmpty && kDebugMode) {
         final instalment = instalments.first;
-        print('===== LIST SCREEN DEBUG =====');
-        print('Instalment ID: ${instalment.id}');
-        print('Invoice ID: ${instalment.invoiceId}');
-        print('Has invoice object: ${instalment.invoice != null}');
+        Logger.debug('===== LIST SCREEN DEBUG =====');
+        Logger.debug('Instalment ID: ${instalment.id}');
+        Logger.debug('Invoice ID: ${instalment.invoiceId}');
+        Logger.debug('Has invoice object: ${instalment.invoice != null}');
         if (instalment.invoice != null) {
-          print('Invoice Number: ${instalment.invoice!.invoiceNumber}');
+          Logger.debug('Invoice Number: ${instalment.invoice!.invoiceNumber}');
         }
-        print('Has client object: ${instalment.client != null}');
+        Logger.debug('Has client object: ${instalment.client != null}');
         if (instalment.client != null) {
-          print('Client Name: ${instalment.client!.businessName}');
+          Logger.debug('Client Name: ${instalment.client!.businessName}');
         }
-        print('Has additionalData: ${instalment.additionalData != null}');
+        Logger.debug('Has additionalData: ${instalment.additionalData != null}');
         if (instalment.additionalData != null) {
-          print('AdditionalData keys: ${instalment.additionalData!.keys.join(', ')}');
+          Logger.debug('AdditionalData keys: ${instalment.additionalData!.keys.join(", ")}');
           instalment.additionalData!.forEach((key, value) {
             if (key.toLowerCase().contains('invoice') || 
                 key.toLowerCase().contains('factura') ||
                 key.toLowerCase().contains('client') ||
                 key.toLowerCase().contains('cliente')) {
-              print('Key: $key, Value: $value');
+              Logger.debug('Key: $key, Value: $value');
             }
           });
         }
-        print('===== END LIST SCREEN DEBUG =====');
+        Logger.debug('===== END LIST SCREEN DEBUG =====');
       }
       
       if (mounted) {
@@ -437,14 +439,18 @@ class _InstalmentListScreenState extends State<InstalmentListScreen> {
 
               if (shouldLogout) {
                 // Cerrar sesión
+                // Store references locally before any async operations
                 final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                final navigator = GoRouter.of(context);
+                final goRouter = GoRouter.of(context);
                 
+                // Perform async operation after capturing all needed references
                 await authProvider.logout();
                 
-                if (mounted) {
-                  navigator.go('/login');
-                }
+                // Check if still mounted before continuing
+                if (!mounted) return;
+                
+                // Use the captured goRouter reference
+                goRouter.go('/login');
               }
             },
           ),
@@ -496,9 +502,9 @@ class InstalmentListItem extends StatelessWidget {
   
   @override
   Widget build(BuildContext context) {
-    final currencyFormat = NumberFormat.currency(
-      symbol: '\$',
-      decimalDigits: 2,
+    // Usar el formateador de moneda con la moneda correcta de la cuota
+    final currencyFormat = CurrencyFormatter.getCurrencyFormat(
+      instalment.invoice?.currency,
     );
     
     final dateFormat = DateFormat('dd/MM/yyyy');
@@ -547,7 +553,7 @@ class InstalmentListItem extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: _getStatusColor().withOpacity(0.2),
+                      color: _getStatusColor().withAlpha(51), // 0.2 * 255 = 51
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: _getStatusColor(),

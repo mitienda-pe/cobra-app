@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../models/instalment.dart';
 import '../services/instalment_service.dart';
+import '../utils/currency_formatter.dart';
+import '../utils/logger.dart';
 
 class InstalmentDetailScreen extends StatefulWidget {
   final int instalmentId;
@@ -75,11 +77,11 @@ class _InstalmentDetailScreenState extends State<InstalmentDetailScreen> {
                   key.toLowerCase().contains('factura') ||
                   key.toLowerCase().contains('client') ||
                   key.toLowerCase().contains('cliente')) {
-                print('Key: $key, Value: $value');
+                Logger.debug('Key: $key, Value: $value');
               }
             });
           }
-          print('===== END DETAIL SCREEN DEBUG =====');
+          Logger.debug('===== END DETAIL SCREEN DEBUG =====');
         }
         
         if (mounted) {
@@ -112,9 +114,8 @@ class _InstalmentDetailScreenState extends State<InstalmentDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormat = NumberFormat.currency(
-      symbol: '\$',
-      decimalDigits: 2,
+    final currencyFormat = CurrencyFormatter.getCurrencyFormat(
+      _instalment?.invoice?.currency,
     );
     final dateFormat = DateFormat('dd/MM/yyyy');
     
@@ -162,7 +163,7 @@ class _InstalmentDetailScreenState extends State<InstalmentDetailScreen> {
                                       vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: _getStatusColor(_instalment!.status).withOpacity(0.2),
+                                      color: _getStatusColor(_instalment!.status).withAlpha(51), // 0.2 * 255 = 51
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
                                         color: _getStatusColor(_instalment!.status),

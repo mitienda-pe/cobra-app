@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
+import '../utils/logger.dart';
 import 'account_provider.dart';
+import 'invoice_account_provider.dart';
 
 class AuthProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -97,6 +99,18 @@ class AuthProvider with ChangeNotifier {
     // Actualizar el número de teléfono almacenado
     _phoneNumber = phoneNumber;
     
+    // Capturar el provider antes del await si el contexto está disponible
+    AccountProvider? accountProvider;
+    InvoiceAccountProvider? invoiceAccountProvider;
+    if (context != null) {
+      try {
+        accountProvider = Provider.of<AccountProvider>(context, listen: false);
+        invoiceAccountProvider = Provider.of<InvoiceAccountProvider>(context, listen: false);
+      } catch (e) {
+        Logger.warning('No se pudo acceder a los providers: $e');
+      }
+    }
+    
     try {
       final success = await _authService.verifyOtp(phoneNumber, otp);
       
@@ -107,22 +121,25 @@ class AuthProvider with ChangeNotifier {
         try {
           await _fetchUserData();
         } catch (e) {
-          if (kDebugMode) {
-            print('Error al obtener datos del usuario después de verificar OTP: $e');
-          }
+          Logger.error('Error al obtener datos del usuario después de verificar OTP', e);
           // No interrumpir el flujo de autenticación si hay un error al obtener los datos
         }
         
-        // Cargar las facturas si tenemos un contexto
-        if (context != null) {
+        // Cargar las facturas si capturamos los providers correctamente
+        if (accountProvider != null) {
           try {
-            // Obtener el AccountProvider y cargar las facturas
-            final accountProvider = Provider.of<AccountProvider>(context, listen: false);
             accountProvider.loadAccounts();
           } catch (e) {
-            if (kDebugMode) {
-              print('Error al cargar las facturas después de verificar OTP: $e');
-            }
+            Logger.error('Error al cargar las cuentas después de verificar OTP', e);
+          }
+        }
+        
+        // También cargar las facturas con el nuevo provider si está disponible
+        if (invoiceAccountProvider != null) {
+          try {
+            invoiceAccountProvider.loadInvoiceAccounts();
+          } catch (e) {
+            Logger.error('Error al cargar las facturas después de verificar OTP', e);
           }
         }
         

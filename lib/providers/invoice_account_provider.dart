@@ -5,6 +5,7 @@ import '../models/invoice.dart';
 import '../models/client.dart' as client_model;
 import '../services/api_service.dart';
 import 'client_provider.dart';
+import '../utils/logger.dart';
 
 class InvoiceAccountProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -65,13 +66,13 @@ class InvoiceAccountProvider with ChangeNotifier {
   }) async {
     // Si no es necesario recargar los datos, retornar inmediatamente
     if (!_shouldRefreshData(forceRefresh: forceRefresh)) {
-      print('Usando datos en caché. Última actualización: ${_lastFetchTime!.toIso8601String()}');
+      Logger.info('Usando datos en caché. Última actualización: ${_lastFetchTime!.toIso8601String()}');
       return;
     }
     
     // Si ya está cargando, evitar múltiples peticiones simultáneas
     if (_isLoading) {
-      print('Ya se está cargando datos, ignorando petición adicional');
+      Logger.info('Ya se está cargando datos, ignorando petición adicional');
       return;
     }
     
@@ -110,7 +111,7 @@ class InvoiceAccountProvider with ChangeNotifier {
             retryCount++;
           }
         } catch (apiError) {
-          print('Error al cargar facturas (intento ${retryCount + 1}): $apiError');
+          Logger.error('Error al cargar facturas (intento ${retryCount + 1})', apiError);
           if (retryCount < maxRetries) {
             await Future.delayed(const Duration(seconds: 1));
             retryCount++;
@@ -131,7 +132,7 @@ class InvoiceAccountProvider with ChangeNotifier {
         _errorMessage = "No se pudieron cargar las facturas después de varios intentos";
       }
     } catch (e) {
-      print('Error al cargar facturas: $e');
+      Logger.error('Error al cargar facturas', e);
       _errorMessage = "Error al cargar facturas: ${e.toString()}";
       // No limpiar la lista de facturas en caso de error para mantener los datos anteriores
     } finally {
@@ -315,13 +316,13 @@ class InvoiceAccountProvider with ChangeNotifier {
         // pero no inmediatamente para evitar múltiples llamadas a la API
         _lastFetchTime = DateTime.now().subtract(const Duration(minutes: 55));
         
-        print('Pago registrado con éxito: ${payment.amount} para la factura $invoiceAccountId');
-        print('Monto pagado: ${updatedAccount.paidAmount}, Monto pendiente: ${updatedAccount.remainingAmount}');
+        Logger.info('Pago registrado con éxito: ${payment.amount} para la factura $invoiceAccountId');
+        Logger.info('Monto pagado: ${updatedAccount.paidAmount}, Monto pendiente: ${updatedAccount.remainingAmount}');
       } else {
         throw Exception('No se encontró la factura con ID $invoiceAccountId');
       }
     } catch (e) {
-      print('Error al registrar el pago: $e');
+      Logger.error('Error al registrar el pago', e);
       rethrow; // Relanzar la excepción para que pueda ser manejada por el llamador
     }
   }

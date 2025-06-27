@@ -14,7 +14,7 @@ class UserProfileWidget extends StatelessWidget {
     return PopupMenuButton<String>(
       offset: const Offset(0, 50),
       icon: CircleAvatar(
-        backgroundColor: Theme.of(context).primaryColor.withOpacity(0.2),
+        backgroundColor: Theme.of(context).primaryColor.withAlpha(51), // 0.2 * 255 = 51
         child: userData != null && userData['profile_picture'] != null
             ? Image.network(userData['profile_picture'])
             : Icon(

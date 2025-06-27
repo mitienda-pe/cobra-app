@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:intl/intl.dart';
 import '../models/instalment.dart';
 import '../services/instalment_service.dart';
+import '../utils/currency_formatter.dart';
 
 enum InstalmentSortOption {
   status,
@@ -202,7 +203,8 @@ class _InstalmentMapScreenState extends State<InstalmentMapScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            context.go('/instalments');
+            // Usar Navigator.pop en lugar de context.go para evitar bucles de navegación
+            Navigator.of(context).pop();
           },
         ),
         actions: [
@@ -426,7 +428,7 @@ class _InstalmentMapScreenState extends State<InstalmentMapScreen> {
     
     return Container(
       decoration: BoxDecoration(
-        color: markerColor.withOpacity(0.8),
+        color: markerColor.withAlpha(204), // 0.8 * 255 = 204
         shape: BoxShape.circle,
         border: Border.all(
           color: Colors.white,
@@ -459,9 +461,8 @@ class _InstalmentMapScreenState extends State<InstalmentMapScreen> {
   }
   
   void _showInstalmentDetails(Instalment instalment) {
-    final currencyFormat = NumberFormat.currency(
-      symbol: '\$',
-      decimalDigits: 2,
+    final currencyFormat = CurrencyFormatter.getCurrencyFormat(
+      instalment.invoice?.currency,
     );
     
     final dateFormat = DateFormat('dd/MM/yyyy');
@@ -491,7 +492,7 @@ class _InstalmentMapScreenState extends State<InstalmentMapScreen> {
                     vertical: 4.0,
                   ),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(instalment.status).withOpacity(0.2),
+                    color: _getStatusColor(instalment.status).withAlpha(51), // 0.2 * 255 = 51
                     borderRadius: BorderRadius.circular(8.0),
                     border: Border.all(
                       color: _getStatusColor(instalment.status),

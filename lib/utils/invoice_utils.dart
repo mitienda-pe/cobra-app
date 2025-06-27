@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../models/invoice.dart';
+import '../utils/logger.dart';
 
 /// Utilidad para obtener facturas con información de clientes incluida
 class InvoiceUtils {
@@ -60,7 +61,7 @@ class InvoiceUtils {
       // Si no se pudo procesar la respuesta, devolver una lista vacía
       return [];
     } catch (e) {
-      print('Error al obtener facturas con clientes: $e');
+      Logger.error('Error al obtener facturas con clientes', e);
       return [];
     }
   }

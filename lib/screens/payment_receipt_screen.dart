@@ -4,11 +4,11 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:go_router/go_router.dart';
 import '../models/instalment.dart';
+import '../utils/currency_formatter.dart';
 
 class PaymentReceiptScreen extends StatefulWidget {
   final Map<String, dynamic> paymentData;
@@ -37,12 +37,18 @@ class PaymentReceiptScreen extends StatefulWidget {
 class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
   final GlobalKey _receiptKey = GlobalKey();
   bool _isSharing = false;
-  final currencyFormat = NumberFormat.currency(
-    locale: 'es_MX',
-    symbol: '\$',
-    decimalDigits: 2,
-  );
-  
+  // Usar el formateador de moneda con la moneda correcta de la cuota
+  late NumberFormat currencyFormat;
+
+  @override
+  void initState() {
+    super.initState();
+    // Inicializar el formateador de moneda con la moneda correcta
+    currencyFormat = CurrencyFormatter.getCurrencyFormat(
+      widget.instalment.invoice?.currency,
+    );
+  }
+
   String _getPaymentMethodName(String method) {
     switch (method) {
       case 'cash':
@@ -59,35 +65,41 @@ class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
   }
 
   Future<void> _shareReceipt() async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     setState(() {
       _isSharing = true;
     });
 
     try {
       // Capturar el widget como imagen
-      RenderRepaintBoundary boundary = _receiptKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      RenderRepaintBoundary boundary =
+          _receiptKey.currentContext!.findRenderObject()
+              as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      
+      ByteData? byteData = await image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+
       if (byteData != null) {
         Uint8List pngBytes = byteData.buffer.asUint8List();
-        
+
         // Guardar la imagen temporalmente
         final tempDir = await getTemporaryDirectory();
         final file = await File('${tempDir.path}/recibo_pago.png').create();
         await file.writeAsBytes(pngBytes);
-        
+
         // Compartir la imagen
         await Share.shareXFiles(
           [XFile(file.path)],
-          text: 'Recibo de pago - ${widget.instalment.invoice?.invoiceNumber ?? 'N/A'}',
+          text:
+              'Recibo de pago - ${widget.instalment.invoice?.invoiceNumber ?? 'N/A'}',
           subject: 'Recibo de pago',
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al compartir: $e')),
-      );
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error al compartir: $e')));
+      }
     } finally {
       setState(() {
         _isSharing = false;
@@ -101,7 +113,7 @@ class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
     final client = widget.instalment.client;
     final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
     final paymentDate = DateTime.now();
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Comprobante de Pago'),
@@ -127,7 +139,7 @@ class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
                   borderRadius: BorderRadius.circular(8),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.grey.withOpacity(0.3),
+                      color: Colors.grey.withAlpha(77), // 0.3 * 255 = 76.5 ≈ 77
                       spreadRadius: 1,
                       blurRadius: 3,
                       offset: const Offset(0, 2),
@@ -158,7 +170,7 @@ class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
                         ],
                       ),
                     ),
-                    
+
                     // Datos del cliente
                     if (client != null) ...[
                       const SizedBox(height: 16),
@@ -178,7 +190,7 @@ class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
                       const SizedBox(height: 8),
                       const Divider(),
                     ],
-                    
+
                     // Datos de la factura
                     if (invoice != null) ...[
                       const SizedBox(height: 16),
@@ -191,13 +203,17 @@ class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text('Número: ${invoice.invoiceNumber}'),
-                      Text('Monto total: ${currencyFormat.format(invoice.amount)}'),
+                      Text(
+                        'Monto total: ${currencyFormat.format(invoice.amount)}',
+                      ),
                       if (invoice.issueDate != null)
-                        Text('Fecha de emisión: ${DateFormat('dd/MM/yyyy').format(invoice.issueDate!)}'),
+                        Text(
+                          'Fecha de emisión: ${DateFormat('dd/MM/yyyy').format(invoice.issueDate!)}',
+                        ),
                       const SizedBox(height: 8),
                       const Divider(),
                     ],
-                    
+
                     // Datos de la cuota
                     const SizedBox(height: 16),
                     const Text(
@@ -209,12 +225,18 @@ class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text('Número: ${widget.instalment.number}'),
-                    Text('Monto original: ${currencyFormat.format(widget.instalment.amount)}'),
-                    Text('Monto pendiente: ${currencyFormat.format(widget.instalment.remainingAmount)}'),
-                    Text('Fecha de vencimiento: ${DateFormat('dd/MM/yyyy').format(widget.instalment.dueDate)}'),
+                    Text(
+                      'Monto original: ${currencyFormat.format(widget.instalment.amount)}',
+                    ),
+                    Text(
+                      'Monto pendiente: ${currencyFormat.format(widget.instalment.remainingAmount)}',
+                    ),
+                    Text(
+                      'Fecha de vencimiento: ${DateFormat('dd/MM/yyyy').format(widget.instalment.dueDate)}',
+                    ),
                     const SizedBox(height: 8),
                     const Divider(),
-                    
+
                     // Datos del pago
                     const SizedBox(height: 16),
                     const Text(
@@ -225,26 +247,37 @@ class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text('ID de pago: ${widget.paymentData['payment_id'] ?? 'N/A'}'),
-                    Text('Monto pagado: ${currencyFormat.format(widget.amount)}'),
-                    Text('Método de pago: ${_getPaymentMethodName(widget.paymentMethod)}'),
-                    if (widget.reconciliationCode != null && widget.reconciliationCode!.isNotEmpty)
-                      Text('Código de conciliación: ${widget.reconciliationCode}'),
+                    Text(
+                      'ID de pago: ${widget.paymentData['payment_id'] ?? 'N/A'}',
+                    ),
+                    Text(
+                      'Monto pagado: ${currencyFormat.format(widget.amount)}',
+                    ),
+                    Text(
+                      'Método de pago: ${_getPaymentMethodName(widget.paymentMethod)}',
+                    ),
+                    if (widget.reconciliationCode != null &&
+                        widget.reconciliationCode!.isNotEmpty)
+                      Text(
+                        'Código de conciliación: ${widget.reconciliationCode}',
+                      ),
                     if (widget.paymentMethod == 'cash') ...[
                       if (widget.cashReceived != null)
-                        Text('Efectivo recibido: ${currencyFormat.format(widget.cashReceived!)}'),
+                        Text(
+                          'Efectivo recibido: ${currencyFormat.format(widget.cashReceived!)}',
+                        ),
                       if (widget.cashChange != null)
-                        Text('Cambio: ${currencyFormat.format(widget.cashChange!)}'),
+                        Text(
+                          'Cambio: ${currencyFormat.format(widget.cashChange!)}',
+                        ),
                     ],
-                    
+
                     // Pie de página
                     const SizedBox(height: 24),
                     const Center(
                       child: Text(
                         'Gracias por su pago',
-                        style: TextStyle(
-                          fontStyle: FontStyle.italic,
-                        ),
+                        style: TextStyle(fontStyle: FontStyle.italic),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -270,7 +303,10 @@ class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
                   icon: const Icon(Icons.share),
                   label: const Text('Compartir'),
                   style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
                   ),
                 ),
                 ElevatedButton.icon(
@@ -281,7 +317,10 @@ class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
                   icon: const Icon(Icons.check_circle),
                   label: const Text('Finalizar'),
                   style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
                   ),
                 ),
               ],

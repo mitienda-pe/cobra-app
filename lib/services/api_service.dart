@@ -8,6 +8,7 @@ import '../models/client.dart';
 import 'api_client.dart';
 import 'mock_service.dart';
 import 'package:dio/dio.dart';
+import '../utils/logger.dart';
 
 class ApiService {
   static const String baseUrl = 'https://cobra.mitienda.host';
@@ -30,20 +31,20 @@ class ApiService {
       _apiClient.dio.interceptors.add(
         InterceptorsWrapper(
           onRequest: (options, handler) {
-            print('REQUEST[${options.method}] => PATH: ${options.path}');
-            print('REQUEST HEADERS: ${options.headers}');
-            print('REQUEST DATA: ${options.data}');
+            Logger.debug('REQUEST[${options.method}] => PATH: ${options.path}');
+            Logger.debug('REQUEST HEADERS: ${options.headers}');
+            Logger.debug('REQUEST DATA: ${options.data}');
             return handler.next(options);
           },
           onResponse: (response, handler) {
-            print('RESPONSE[${response.statusCode}] => PATH: ${response.requestOptions.path}');
-            print('RESPONSE DATA: ${response.data}');
+            Logger.debug('RESPONSE[${response.statusCode}] => PATH: ${response.requestOptions.path}');
+            Logger.debug('RESPONSE DATA: ${response.data}');
             return handler.next(response);
           },
           onError: (DioException e, handler) {
-            print('ERROR[${e.response?.statusCode}] => PATH: ${e.requestOptions.path}');
-            print('ERROR MESSAGE: ${e.message}');
-            print('ERROR DATA: ${e.response?.data}');
+            Logger.error('ERROR[${e.response?.statusCode}] => PATH: ${e.requestOptions.path}', e);
+            Logger.error('ERROR MESSAGE: ${e.message}', e);
+            Logger.error('ERROR DATA: ${e.response?.data}', e);
             return handler.next(e);
           },
         ),
@@ -657,7 +658,7 @@ class ApiService {
     double? cashChange,
   }) async {
     if (_useMockServices) {
-      print('Simulando registro de pago: $amount para factura $invoiceId');
+      Logger.info('Simulando registro de pago: $amount para factura $invoiceId');
       await Future.delayed(const Duration(seconds: 1));
       return {
         'success': true,
@@ -682,7 +683,7 @@ class ApiService {
 
       return response.data;
     } catch (e) {
-      print('Error al registrar el pago: $e');
+      Logger.error('Error al registrar el pago', e);
       rethrow;
     }
   }

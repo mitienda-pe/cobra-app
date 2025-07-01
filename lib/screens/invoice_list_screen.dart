@@ -197,47 +197,41 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
             ListTile(
               leading: const Icon(Icons.exit_to_app),
               title: const Text('Cerrar Sesión'),
-              onTap: () async {
-                // Mostrar diálogo de confirmación
-                final shouldLogout =
-                    await showDialog<bool>(
-                      context: context,
-                      builder:
-                          (context) => AlertDialog(
-                            title: const Text('Cerrar Sesión'),
-                            content: const Text(
-                              '¿Estás seguro de que deseas cerrar sesión?',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('Cancelar'),
-                              ),
-                              ElevatedButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text('Cerrar Sesión'),
-                              ),
-                            ],
-                          ),
-                    ) ??
-                    false;
-
-                if (shouldLogout) {
-                  // Store all context references before any async operations
-                  final navigator = Navigator.of(context);
-                  final authProvider = Provider.of<AuthProvider>(
-                    context,
-                    listen: false,
-                  );
-                  
-                  // Execute synchronous operations first
-                  navigator.pop(); // Cerrar el drawer
-                  
-                  // Then perform async operations - no context usage after this point
-                  await authProvider.logout();
-                  // La redirección a la pantalla de login se manejará automáticamente
-                  // a través del redirect configurado en el GoRouter
-                }
+              onTap: () {
+                // Capturar referencias antes de cualquier operación asíncrona
+                final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                final drawerNavigator = Navigator.of(context);
+                
+                // Mostrar diálogo de confirmación usando then() en lugar de await
+                showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Cerrar Sesión'),
+                    content: const Text(
+                      '¿Estás seguro de que deseas cerrar sesión?',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancelar'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Cerrar Sesión'),
+                      ),
+                    ],
+                  ),
+                ).then((shouldLogout) async {
+                  if (shouldLogout == true) {
+                    // Cerrar el drawer primero (operación síncrona)
+                    drawerNavigator.pop();
+                    
+                    // Luego realizar la operación asíncrona
+                    await authProvider.logout();
+                    // La redirección a la pantalla de login se manejará automáticamente
+                    // a través del redirect configurado en el GoRouter
+                  }
+                });
               },
             ),
           ],

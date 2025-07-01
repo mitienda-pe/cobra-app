@@ -415,43 +415,40 @@ class _InstalmentListScreenState extends State<InstalmentListScreen> {
           ListTile(
             leading: const Icon(Icons.exit_to_app),
             title: const Text('Cerrar Sesión'),
-            onTap: () async {
-              // Mostrar diálogo de confirmación
-              final shouldLogout = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Cerrar Sesión'),
-                      content: const Text(
-                          '¿Estás seguro de que deseas cerrar sesión?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancelar'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Cerrar Sesión'),
-                        ),
-                      ],
+            onTap: () {
+              // Capturar el AuthProvider antes de cualquier operación asíncrona
+              final authProvider = Provider.of<AuthProvider>(context, listen: false);
+              // Capturar el router antes de cualquier operación asíncrona
+              final goRouter = GoRouter.of(context);
+              // Mostrar el diálogo de confirmación
+              showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Cerrar sesión'),
+                  content: const Text(
+                      '¿Estás seguro de que quieres cerrar sesión?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('Cancelar'),
                     ),
-                  ) ??
-                  false;
-
-              if (shouldLogout) {
-                // Cerrar sesión
-                // Store references locally before any async operations
-                final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                final goRouter = GoRouter.of(context);
-                
-                // Perform async operation after capturing all needed references
-                await authProvider.logout();
-                
-                // Check if still mounted before continuing
-                if (!mounted) return;
-                
-                // Use the captured goRouter reference
-                goRouter.go('/login');
-              }
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text('Cerrar sesión'),
+                    ),
+                  ],
+                ),
+              ).then((shouldLogout) async {
+                // Procesar el resultado del diálogo
+                if (shouldLogout == true) {
+                  // Realizar la operación asíncrona
+                  await authProvider.logout();
+                  // Verificar si el widget sigue montado
+                  if (!mounted) return;
+                  // Usar la referencia capturada para la navegación
+                  goRouter.go('/login');
+                }
+              });
             },
           ),
         ],

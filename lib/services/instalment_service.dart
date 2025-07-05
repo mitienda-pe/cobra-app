@@ -908,8 +908,8 @@ class InstalmentService {
             print('Error al generar QR: $e');
             if (e is DioException && e.response != null) {
               print('ERROR DATA: ${e.response?.data}');
-
-              // Si el error es 401 (No autorizado), podría ser un problema con el token
+              
+              // Verificar el código de estado HTTP
               if (e.response?.statusCode == 401) {
                 print(
                   'Error de autorización al generar QR. Posible token inválido o expirado.',
@@ -919,6 +919,29 @@ class InstalmentService {
                   'message':
                       'Sesión expirada. Por favor, vuelva a iniciar sesión.',
                 };
+              } 
+              
+              // Manejar específicamente el error 400 de Ligo API
+              if (e.response?.statusCode == 400) {
+                // Verificar si es un error específico de Ligo
+                final data = e.response?.data;
+                if (data is Map && 
+                    data.containsKey('messages') && 
+                    data['messages'] is Map && 
+                    data['messages'].containsKey('error') &&
+                    data['messages']['error'] == 'Invalid response from Ligo API') {
+                  
+                  Logger.error('Error de Ligo API al generar QR para cuota: $instalmentId');
+                  
+                  // Intentar obtener más detalles si están disponibles
+                  String detailMessage = 'Error en el servicio de pagos';
+                  
+                  return {
+                    'success': false,
+                    'message': 'No se pudo generar el código QR: $detailMessage. Por favor, intente con otro método de pago.',
+                    'error_code': 'ligo_api_error'
+                  };
+                }
               }
             }
           }

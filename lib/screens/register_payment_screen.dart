@@ -684,12 +684,13 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
         _isLoading = true;
       });
       
+      // Store context references before async gap
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
+      final invoiceAccountProvider = Provider.of<InvoiceAccountProvider>(context, listen: false);
+      
       try {
         final amount = double.parse(_amountController.text);
-        // Store context reference before async gap
-        final scaffoldMessenger = ScaffoldMessenger.of(context);
-        final navigator = Navigator.of(context);
-        final invoiceAccountProvider = Provider.of<InvoiceAccountProvider>(context, listen: false);
         
         // Crear objeto de pago según el método
         final payment = Payment(
@@ -726,10 +727,10 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
         // Manejar errores
         Logger.error('Error al registrar el pago', e);
         
-        // Capture ScaffoldMessenger outside of mounted check
-        final scaffoldMessenger = ScaffoldMessenger.of(context);
+        // Ya tenemos scaffoldMessenger capturado antes de la operación asíncrona
+        // No necesitamos volver a obtenerlo aquí
         
-        // Then check if still mounted before showing the snackbar
+        // Check if still mounted before showing the snackbar
         if (mounted) {
           scaffoldMessenger.showSnackBar(
             SnackBar(

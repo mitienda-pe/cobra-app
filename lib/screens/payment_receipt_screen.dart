@@ -88,12 +88,13 @@ class _PaymentReceiptScreenState extends State<PaymentReceiptScreen> {
         final file = await File('${tempDir.path}/recibo_pago.png').create();
         await file.writeAsBytes(pngBytes);
 
-        // Compartir la imagen
-        await Share.shareXFiles(
-          [XFile(file.path)],
-          text:
-              'Recibo de pago - ${widget.instalment.invoice?.invoiceNumber ?? 'N/A'}',
-          subject: 'Recibo de pago',
+        // Compartir la imagen usando el nuevo método recomendado
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(file.path)],
+            text: 'Recibo de pago - ${widget.instalment.invoice?.invoiceNumber ?? 'N/A'}',
+            subject: 'Recibo de pago',
+          ),
         );
       }
     } catch (e) {

@@ -43,6 +43,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      
       if (_remainingTime > 0) {
         setState(() {
           _remainingTime--;
@@ -54,17 +59,24 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   Future<void> _verifyOtp() async {
+    // Verificar si el widget está montado y el controlador no ha sido dispuesto
+    if (!mounted) return;
+    
     if (_otpController.text.length != 6) {
-      setState(() {
-        _errorMessage = 'Por favor ingresa el código completo de 6 dígitos';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Por favor ingresa el código completo de 6 dígitos';
+        });
+      }
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
+    }
 
     try {
       // Guardar el código OTP en una variable local para evitar acceder al controlador después
@@ -80,21 +92,25 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (success) {
         // Navegar a la pantalla principal y eliminar todas las rutas anteriores
         // para evitar que el usuario pueda volver a la pantalla de verificación
-        GoRouter.of(context).go('/accounts');
+        GoRouter.of(context).go('/instalments');
       } else {
-        setState(() {
-          _errorMessage = 'Código incorrecto. Inténtalo de nuevo.';
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Código incorrecto. Inténtalo de nuevo.';
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
       // Verificar si el widget todavía está montado antes de actualizar el estado
       if (!mounted) return;
       
-      setState(() {
-        _errorMessage = 'Error al verificar el código. Inténtalo de nuevo.';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Error al verificar el código. Inténtalo de nuevo.';
+          _isLoading = false;
+        });
+      }
       
       if (kDebugMode) {
         print('Error en verificación OTP: $e');
@@ -233,8 +249,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   onCompleted: (v) {
                     // No llamar a _verifyOtp automáticamente para evitar problemas
                     // con el controlador después de la navegación
-                    if (mounted) {
-                      // Verificar si el widget está montado antes de proceder
+                    if (mounted && !_isLoading) {
+                      // Verificar si el widget está montado y no está procesando antes de proceder
                       _verifyOtp();
                     }
                   },

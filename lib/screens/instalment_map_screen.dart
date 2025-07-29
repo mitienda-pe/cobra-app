@@ -203,8 +203,12 @@ class _InstalmentMapScreenState extends State<InstalmentMapScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            // Usar Navigator.pop en lugar de context.go para evitar bucles de navegación
-            Navigator.of(context).pop();
+            // Verificar si se puede hacer pop, sino navegar a la pantalla principal
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              context.go('/instalments');
+            }
           },
         ),
         actions: [
@@ -538,7 +542,9 @@ class _InstalmentMapScreenState extends State<InstalmentMapScreen> {
               children: [
                 ElevatedButton.icon(
                   onPressed: () {
-                    Navigator.pop(context);
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.pop(context);
+                    }
                     context.push('/instalments/${instalment.id}');
                   },
                   icon: const Icon(Icons.visibility),
@@ -547,7 +553,9 @@ class _InstalmentMapScreenState extends State<InstalmentMapScreen> {
                 if (instalment.status == 'pending')
                   ElevatedButton.icon(
                     onPressed: () {
-                      Navigator.pop(context);
+                      if (Navigator.of(context).canPop()) {
+                        Navigator.pop(context);
+                      }
                       context.push('/instalments/${instalment.id}/pay');
                     },
                     icon: const Icon(Icons.payment),
@@ -610,13 +618,17 @@ class _InstalmentMapScreenState extends State<InstalmentMapScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
+              if (Navigator.of(context).canPop()) {
+                Navigator.pop(context);
+              }
             },
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
+              if (Navigator.of(context).canPop()) {
+                Navigator.pop(context);
+              }
               _loadInstalments();
             },
             child: const Text('Aplicar'),
@@ -679,13 +691,17 @@ class _InstalmentMapScreenState extends State<InstalmentMapScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
+              if (Navigator.of(context).canPop()) {
+                Navigator.pop(context);
+              }
             },
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
+              if (Navigator.of(context).canPop()) {
+                Navigator.pop(context);
+              }
               setState(() {});
             },
             child: const Text('Aplicar'),

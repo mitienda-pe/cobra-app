@@ -525,10 +525,10 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
       // Log para debug
       debugPrint('[DEBUG] Fecha actual del emulador: $now');
       
-      // Verificar si tenemos el campo expiration
-      if (_qrData!['expiration'] != null) {
-        expiration = DateTime.parse(_qrData!['expiration']);
-        debugPrint('[DEBUG] Usando expiration del API: $expiration');
+      // Verificar si tenemos el campo expires_at
+      if (_qrData!['expires_at'] != null) {
+        expiration = DateTime.parse(_qrData!['expires_at']);
+        debugPrint('[DEBUG] Usando expires_at del API: $expiration');
       } 
       // Si no, usar timestamp + 15 minutos
       else if (_qrData!['qr_data'] != null && _qrData!['qr_data']['timestamp'] != null) {
@@ -600,9 +600,9 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
     String expirationText = 'Expira en 15 minutos';
     try {
       DateTime expiration;
-      if (_qrData!['expiration'] != null) {
-        expiration = DateTime.parse(_qrData!['expiration']);
-        expirationText = 'Expira: ${_formatExpirationDate(_qrData!['expiration'])}';
+      if (_qrData!['expires_at'] != null) {
+        expiration = DateTime.parse(_qrData!['expires_at']);
+        expirationText = 'Expira: ${_formatExpirationDate(_qrData!['expires_at'])}';
       } else if (_qrData!['qr_data'] != null && _qrData!['qr_data']['timestamp'] != null) {
         final int timestamp = _qrData!['qr_data']['timestamp'];
         final DateTime createdAt = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);

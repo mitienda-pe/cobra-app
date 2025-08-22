@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
 import '../models/instalment.dart';
 import '../services/instalment_service.dart';
 import '../utils/currency_formatter.dart';
@@ -35,6 +35,8 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
   double _cashChange = 0.0;
   String? _errorMessage;
   Map<String, dynamic>? _qrData;
+  Timer? _countdownTimer;
+  Duration? _remainingTime;
 
   @override
   void initState() {
@@ -47,6 +49,7 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
     _amountController.dispose();
     _cashReceivedController.dispose();
     _reconciliationCodeController.dispose();
+    _countdownTimer?.cancel();
     super.dispose();
   }
 
@@ -454,16 +457,16 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  'Expira: ${_formatExpirationDate(_qrData!['expiration'])}',
-                  style: TextStyle(color: Colors.grey.shade700),
-                ),
+                _buildExpirationInfo(),                
                 const SizedBox(height: 16),
-                // Botón para abrir el QR en el navegador
+                // Botón para solicitar nuevo QR
                 OutlinedButton.icon(
-                  onPressed: () => _launchQRUrl(_qrData!['qr_image_url']),
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('Abrir en navegador'),
+                  onPressed: _requestNewQR,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Solicitar nuevo QR'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.orange,
+                  ),
                 ),
               ],
             ),
@@ -511,22 +514,169 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
       return dateString;
     }
   }
-  
-  Future<void> _launchQRUrl(String url) async {
+
+  void _startCountdownTimer() {
+    if (_qrData == null) return;
+
     try {
-      final Uri uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      DateTime expiration;
+      final DateTime now = DateTime.now();
+      
+      // Log para debug
+      debugPrint('[DEBUG] Fecha actual del emulador: $now');
+      
+      // Verificar si tenemos el campo expiration
+      if (_qrData!['expiration'] != null) {
+        expiration = DateTime.parse(_qrData!['expiration']);
+        debugPrint('[DEBUG] Usando expiration del API: $expiration');
+      } 
+      // Si no, usar timestamp + 15 minutos
+      else if (_qrData!['qr_data'] != null && _qrData!['qr_data']['timestamp'] != null) {
+        final int timestamp = _qrData!['qr_data']['timestamp'];
+        final DateTime createdAt = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        expiration = createdAt.add(const Duration(minutes: 15));
+        
+        debugPrint('[DEBUG] Timestamp del QR: $timestamp');
+        debugPrint('[DEBUG] Fecha de creación del QR: $createdAt');
+        debugPrint('[DEBUG] Fecha de expiración calculada: $expiration');
+      }
+      // Si tenemos timestamp directo (por si cambia la estructura)
+      else if (_qrData!['timestamp'] != null) {
+        final int timestamp = _qrData!['timestamp'];
+        final DateTime createdAt = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        expiration = createdAt.add(const Duration(minutes: 15));
+        
+        debugPrint('[DEBUG] Timestamp directo del QR: $timestamp');
+        debugPrint('[DEBUG] Fecha de creación del QR: $createdAt');
+        debugPrint('[DEBUG] Fecha de expiración calculada: $expiration');
+      }
+      else {
+        // No podemos determinar la expiración
+        setState(() {
+          _remainingTime = null;
+        });
+        return;
+      }
+
+      if (expiration.isAfter(now)) {
+        setState(() {
+          _remainingTime = expiration.difference(now);
+        });
+
+        _countdownTimer?.cancel();
+        _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+          final DateTime currentTime = DateTime.now();
+          final Duration remaining = expiration.difference(currentTime);
+
+          if (remaining.inSeconds <= 0) {
+            timer.cancel();
+            setState(() {
+              _remainingTime = null;
+            });
+          } else {
+            setState(() {
+              _remainingTime = remaining;
+            });
+          }
+        });
       } else {
-        throw 'No se pudo abrir $url';
+        setState(() {
+          _remainingTime = null;
+        });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al abrir URL: $e')),
-        );
-      }
+      setState(() {
+        _remainingTime = null;
+      });
     }
+  }
+
+  Widget _buildExpirationInfo() {
+    if (_qrData == null) {
+      return const SizedBox.shrink();
+    }
+
+    // Calcular la fecha de expiración para mostrar
+    String expirationText = 'Expira en 15 minutos';
+    try {
+      DateTime expiration;
+      if (_qrData!['expiration'] != null) {
+        expiration = DateTime.parse(_qrData!['expiration']);
+        expirationText = 'Expira: ${_formatExpirationDate(_qrData!['expiration'])}';
+      } else if (_qrData!['qr_data'] != null && _qrData!['qr_data']['timestamp'] != null) {
+        final int timestamp = _qrData!['qr_data']['timestamp'];
+        final DateTime createdAt = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        expiration = createdAt.add(const Duration(minutes: 15));
+        expirationText = 'Expira: ${DateFormat('dd/MM/yyyy HH:mm').format(expiration)}';
+      } else if (_qrData!['timestamp'] != null) {
+        final int timestamp = _qrData!['timestamp'];
+        final DateTime createdAt = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        expiration = createdAt.add(const Duration(minutes: 15));
+        expirationText = 'Expira: ${DateFormat('dd/MM/yyyy HH:mm').format(expiration)}';
+      }
+    } catch (e) {
+      // Si hay error, usar texto por defecto
+    }
+
+    return Column(
+      children: [
+        Text(
+          expirationText,
+          style: TextStyle(color: Colors.grey.shade700),
+        ),
+        if (_remainingTime != null) ...[
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: _remainingTime!.inMinutes < 5 ? Colors.red.shade100 : Colors.orange.shade100,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              'Tiempo restante: ${_formatRemainingTime(_remainingTime!)}',
+              style: TextStyle(
+                color: _remainingTime!.inMinutes < 5 ? Colors.red : Colors.orange,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ] else ...[
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.red.shade100,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              'QR EXPIRADO',
+              style: TextStyle(
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _formatRemainingTime(Duration remaining) {
+    final int minutes = remaining.inMinutes;
+    final int seconds = remaining.inSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _requestNewQR() async {
+    setState(() {
+      _qrData = null;
+      _remainingTime = null;
+    });
+    _countdownTimer?.cancel();
+    
+    await _generateQRCode();
   }
   
   Future<void> _generateQRCode() async {
@@ -546,6 +696,7 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
           
           if (result['success'] == true) {
             _qrData = result;
+            _startCountdownTimer();
           } else {
             _errorMessage = result['message'] ?? 'Error al generar el código QR';
           }

@@ -13,7 +13,7 @@ class PaymentNotificationService {
   factory PaymentNotificationService() => _instance;
   PaymentNotificationService._internal();
 
-  SSEClient? _sseClient;
+  StreamSubscription<SSEModel>? _sseSubscription;
   Timer? _pollingTimer;
   bool _isMonitoring = false;
 
@@ -55,7 +55,8 @@ class PaymentNotificationService {
     try {
       final url = '${AppConfig.baseUrl}/api/payment-stream/$qrId';
       
-      _sseClient = SSEClient.subscribeToSSE(
+      // Crear stream SSE
+      final sseStream = SSEClient.subscribeToSSE(
         method: SSERequestType.GET,
         url: url,
         header: {
@@ -65,7 +66,7 @@ class PaymentNotificationService {
       );
 
       // Escuchar eventos de pago exitoso
-      _sseClient!.stream!.listen(
+      _sseSubscription = sseStream.listen(
         (event) {
           try {
             if (event.event == 'payment_success' && event.data != null) {
@@ -82,8 +83,8 @@ class PaymentNotificationService {
         },
         onError: (error) {
           Logger.error('PaymentNotificationService: Error en SSE', error);
-          _sseClient?.unsubscribe();
-          _sseClient = null;
+          _sseSubscription?.cancel();
+          _sseSubscription = null;
           
           // Fallback a polling si SSE falla
           if (_isMonitoring) {
@@ -149,8 +150,8 @@ class PaymentNotificationService {
     Logger.info('PaymentNotificationService: Deteniendo monitoreo');
     
     _isMonitoring = false;
-    _sseClient?.unsubscribe();
-    _sseClient = null;
+    _sseSubscription?.cancel();
+    _sseSubscription = null;
     _pollingTimer?.cancel();
     _pollingTimer = null;
   }
@@ -187,8 +188,22 @@ class PaymentNotificationService {
       // Si es JSON
       if (qrResponse.trim().startsWith('{')) {
         final jsonData = json.decode(qrResponse);
+        
+        // Buscar order_id primero (formato actual de tu API)
+        if (jsonData.containsKey('order_id')) {
+          return jsonData['order_id'].toString();
+        }
+        
+        // Fallback a otros campos comunes
         if (jsonData.containsKey('id_qr')) {
           return jsonData['id_qr'].toString();
+        }
+        
+        if (jsonData.containsKey('qr_data') && jsonData['qr_data'] != null) {
+          final qrData = jsonData['qr_data'];
+          if (qrData.containsKey('id')) {
+            return qrData['id'].toString();
+          }
         }
       }
       

@@ -2,6 +2,9 @@ class AppConfig {
   // API Configuration
   static const String apiBaseUrl = 'https://cobra.mitienda.host';
   
+  // Alias for backward compatibility with notification service
+  static String get baseUrl => apiBaseUrl;
+  
   // Authentication
   static const int otpLength = 6;
   static const int otpExpirationMinutes = 5;

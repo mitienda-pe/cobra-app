@@ -8,6 +8,7 @@ import '../providers/invoice_account_provider.dart';
 import '../models/invoice_account.dart';
 import '../utils/currency_formatter.dart';
 import '../utils/logger.dart';
+import '../services/payment_notification_service.dart';
 
 class RegisterPaymentScreen extends StatefulWidget {
   final String invoiceAccountId;
@@ -35,6 +36,11 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
   double _remainingAfterPayment = 0.0;
   bool _isProcessingInput = false;
   bool _isLoading = false;
+  
+  // Para notificaciones de pago QR
+  bool _isMonitoringQRPayment = false;
+  String? _currentQRId;
+  final PaymentNotificationService _notificationService = PaymentNotificationService();
   
   @override
   void initState() {
@@ -74,6 +80,10 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
   
   @override
   void dispose() {
+    // Detener monitoreo de notificaciones si está activo
+    _notificationService.stopMonitoring();
+    _notificationService.dispose();
+    
     // Eliminar listeners para evitar fugas de memoria
     _amountController.removeListener(_onAmountChanged);
     _cashReceivedController.removeListener(_updateCashChange);
@@ -547,23 +557,87 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
               
               const SizedBox(height: 32),
               
-              // Botón de registro de pago
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : () => _registerPayment(context, invoiceAccount),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              // Botones según el método de pago
+              if (_selectedMethod == PaymentMethod.qr) ...[
+                // Botón especial para generar QR
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: (_isLoading || _isMonitoringQRPayment) ? null : () => _generateQRPayment(context, invoiceAccount),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      backgroundColor: Theme.of(context).primaryColor,
+                    ),
+                    icon: _isMonitoringQRPayment 
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.qr_code, color: Colors.white),
+                    label: Text(
+                      _isMonitoringQRPayment 
+                          ? 'Esperando pago...' 
+                          : 'Generar QR para Pago',
+                      style: const TextStyle(fontSize: 16, color: Colors.white),
                     ),
                   ),
-                  child: const Text(
-                    'Registrar Pago',
-                    style: TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 16),
+                if (_isMonitoringQRPayment) ...[
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withAlpha(26),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.withAlpha(77)),
+                    ),
+                    child: const Column(
+                      children: [
+                        Icon(Icons.qr_code_scanner, size: 40, color: Colors.blue),
+                        SizedBox(height: 8),
+                        Text(
+                          'Escaneando pagos...',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'El pago se detectará automáticamente cuando sea completado',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ] else ...[
+                // Botón normal de registro para otros métodos
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : () => _registerPayment(context, invoiceAccount),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Registrar Pago',
+                      style: TextStyle(fontSize: 16),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -675,6 +749,165 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
     }
   }
   
+  /// Genera un QR para pago e inicia el monitoreo de notificaciones
+  Future<void> _generateQRPayment(BuildContext context, InvoiceAccount invoiceAccount) async {
+    if (!mounted || _isMonitoringQRPayment) return;
+    
+    if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isLoading = true;
+        _isMonitoringQRPayment = true;
+      });
+      
+      try {
+        final amount = double.parse(_amountController.text);
+        
+        // TODO: Aquí deberías llamar a tu API para generar el QR
+        // Por ahora simularemos la respuesta
+        final qrResponse = await _generateQRFromAPI(invoiceAccount, amount);
+        
+        // Extraer QR ID de la respuesta
+        final qrId = PaymentNotificationService.extractQrId(qrResponse);
+        
+        if (qrId != null) {
+          _currentQRId = qrId;
+          
+          // Iniciar monitoreo de notificaciones
+          await _notificationService.startMonitoring(
+            qrId: qrId,
+            onPaymentSuccess: (paymentData) => _onQRPaymentSuccess(paymentData, invoiceAccount),
+            onTimeout: _onQRPaymentTimeout,
+          );
+          
+          setState(() {
+            _isLoading = false;
+          });
+          
+          // Mostrar el QR al usuario (implementar según tu UI)
+          _showQRCodeDialog(qrResponse);
+          
+        } else {
+          throw Exception('No se pudo extraer el ID del QR generado');
+        }
+        
+      } catch (e) {
+        Logger.error('Error generando QR', e);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error generando QR: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          
+          setState(() {
+            _isLoading = false;
+            _isMonitoringQRPayment = false;
+          });
+        }
+      }
+    }
+  }
+  
+  /// Maneja el pago exitoso recibido por notificación
+  void _onQRPaymentSuccess(Map<String, dynamic> paymentData, InvoiceAccount invoiceAccount) {
+    if (!mounted) return;
+    
+    Logger.info('Pago QR recibido: $paymentData');
+    
+    setState(() {
+      _isMonitoringQRPayment = false;
+      _currentQRId = null;
+    });
+    
+    // Navegar a pantalla de recibo o detalle del pago
+    final paymentId = paymentData['payment_id']?.toString();
+    if (paymentId != null) {
+      context.go('/payment-receipt/$paymentId');
+    } else {
+      // Fallback: volver a la pantalla anterior
+      Navigator.of(context).pop();
+    }
+  }
+  
+  /// Maneja el timeout del monitoreo de pagos
+  void _onQRPaymentTimeout() {
+    if (!mounted) return;
+    
+    setState(() {
+      _isMonitoringQRPayment = false;
+      _currentQRId = null;
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('No se detectó el pago. Puedes verificar manualmente en el listado de pagos.'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 5),
+      ),
+    );
+  }
+  
+  /// Simula la llamada a la API para generar QR (reemplaza con tu implementación real)
+  Future<String> _generateQRFromAPI(InvoiceAccount invoiceAccount, double amount) async {
+    // TODO: Implementa la llamada real a tu API
+    // Esta es solo una simulación
+    await Future.delayed(const Duration(seconds: 2));
+    
+    // Simular respuesta de la API
+    final mockResponse = {
+      'id_qr': '12345678901234567890',
+      'qr_image_url': 'https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=mock_qr_data',
+      'qr_string': '{"id":"12345678901234567890","amount":${amount.toStringAsFixed(2)}}'
+    };
+    
+    return mockResponse['qr_string']!;
+  }
+  
+  /// Muestra el QR code en un dialog
+  void _showQRCodeDialog(String qrResponse) {
+    // TODO: Implementar dialog con el QR code
+    // Por ahora mostrar un placeholder
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Código QR generado'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.qr_code, size: 100),
+            const SizedBox(height: 16),
+            Text('QR ID: ${_currentQRId ?? 'N/A'}'),
+            const SizedBox(height: 8),
+            const Text('Escanea el código QR para completar el pago'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _stopQRMonitoring();
+            },
+            child: const Text('Cancelar'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// Detiene el monitoreo de pagos QR
+  void _stopQRMonitoring() {
+    if (_isMonitoringQRPayment) {
+      _notificationService.stopMonitoring();
+      setState(() {
+        _isMonitoringQRPayment = false;
+        _currentQRId = null;
+      });
+    }
+  }
+
   Future<void> _registerPayment(BuildContext context, InvoiceAccount invoiceAccount) async {
     if (!mounted) return;
     

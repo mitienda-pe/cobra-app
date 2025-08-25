@@ -69,6 +69,10 @@ dependencies:
   geolocator: ^14.0.1
   share_plus: ^11.0.0
   path_provider: ^2.1.5
+  
+  # Para notificaciones de pago
+  eventsource: ^0.5.1  # Para Server-Sent Events
+  fluttertoast: ^8.2.8  # Para notificaciones toast
 
 dev_dependencies:
   flutter_test:

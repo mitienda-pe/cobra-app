@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:eventsource/eventsource.dart';
+import 'package:flutter_client_sse/constants/sse_request_type_enum.dart';
+import 'package:flutter_client_sse/flutter_client_sse.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:flutter/material.dart';
 import '../config/app_config.dart';
@@ -12,7 +13,7 @@ class PaymentNotificationService {
   factory PaymentNotificationService() => _instance;
   PaymentNotificationService._internal();
 
-  EventSource? _eventSource;
+  SSEClient? _sseClient;
   Timer? _pollingTimer;
   bool _isMonitoring = false;
 
@@ -52,40 +53,47 @@ class PaymentNotificationService {
   /// Inicia conexión SSE
   Future<bool> _startSSE(String qrId, Function(Map<String, dynamic>) onPaymentSuccess) async {
     try {
-      final uri = Uri.parse('${AppConfig.baseUrl}/api/payment-stream/$qrId');
+      final url = '${AppConfig.baseUrl}/api/payment-stream/$qrId';
       
-      _eventSource = await EventSource.connect(uri, headers: {
-        'Accept': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-      });
+      _sseClient = SSEClient.subscribeToSSE(
+        method: SSERequestType.GET,
+        url: url,
+        header: {
+          'Accept': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+        },
+      );
 
       // Escuchar eventos de pago exitoso
-      _eventSource!.listen((Event event) {
-        if (event.event == 'payment_success' && event.data != null) {
+      _sseClient!.stream!.listen(
+        (event) {
           try {
-            final paymentData = json.decode(event.data!);
-            Logger.info('PaymentNotificationService: Pago recibido vía SSE: $paymentData');
-            
-            stopMonitoring();
-            _showSuccessMessage(paymentData);
-            onPaymentSuccess(paymentData);
+            if (event.event == 'payment_success' && event.data != null) {
+              final paymentData = json.decode(event.data!);
+              Logger.info('PaymentNotificationService: Pago recibido vía SSE: $paymentData');
+              
+              stopMonitoring();
+              _showSuccessMessage(paymentData);
+              onPaymentSuccess(paymentData);
+            }
           } catch (e) {
             Logger.error('PaymentNotificationService: Error procesando evento SSE', e);
           }
-        }
-      });
-
-      // Manejar errores de SSE
-      _eventSource!.onError = (error) {
-        Logger.error('PaymentNotificationService: Error en SSE', error);
-        _eventSource?.close();
-        _eventSource = null;
-        
-        // Fallback a polling si SSE falla
-        if (_isMonitoring) {
-          _startPolling(qrId, onPaymentSuccess);
-        }
-      };
+        },
+        onError: (error) {
+          Logger.error('PaymentNotificationService: Error en SSE', error);
+          _sseClient?.unsubscribe();
+          _sseClient = null;
+          
+          // Fallback a polling si SSE falla
+          if (_isMonitoring) {
+            _startPolling(qrId, onPaymentSuccess);
+          }
+        },
+        onDone: () {
+          Logger.info('PaymentNotificationService: SSE conexión cerrada');
+        },
+      );
 
       return true;
     } catch (e) {
@@ -141,8 +149,8 @@ class PaymentNotificationService {
     Logger.info('PaymentNotificationService: Deteniendo monitoreo');
     
     _isMonitoring = false;
-    _eventSource?.close();
-    _eventSource = null;
+    _sseClient?.unsubscribe();
+    _sseClient = null;
     _pollingTimer?.cancel();
     _pollingTimer = null;
   }

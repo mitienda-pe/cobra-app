@@ -193,13 +193,26 @@ class PaymentNotificationService {
         Logger.info('PaymentNotificationService: JSON parseado exitosamente');
         
         // Intentar extraer del hash EMV primero (más confiable)
-        // Formato esperado: {"qr_data": {"hash": "EMV_STRING..."}}
-        if (jsonData.containsKey('qr_data') && jsonData['qr_data'] is Map) {
-          final qrData = jsonData['qr_data'] as Map<String, dynamic>;
-          Logger.info('PaymentNotificationService: qr_data encontrado');
+        // El backend puede enviar qr_data de dos formas:
+        // 1. Como string directo: {"qr_data": "EMV_STRING"}
+        // 2. Como objeto: {"qr_data": {"hash": "EMV_STRING"}}
+        if (jsonData.containsKey('qr_data') && jsonData['qr_data'] != null) {
+          String? hashString;
           
-          if (qrData.containsKey('hash') && qrData['hash'] != null) {
-            final hashString = qrData['hash'].toString();
+          if (jsonData['qr_data'] is String) {
+            // Caso 1: qr_data es string directo
+            hashString = jsonData['qr_data'] as String;
+            Logger.info('PaymentNotificationService: qr_data es string directo');
+          } else if (jsonData['qr_data'] is Map) {
+            // Caso 2: qr_data es objeto con campo hash
+            final qrData = jsonData['qr_data'] as Map<String, dynamic>;
+            if (qrData.containsKey('hash')) {
+              hashString = qrData['hash'].toString();
+              Logger.info('PaymentNotificationService: qr_data es objeto con hash');
+            }
+          }
+          
+          if (hashString != null) {
             Logger.info('PaymentNotificationService: hash encontrado: ${hashString.substring(0, 50)}...');
             
             // Buscar patrón EMV: 30 + longitud + 20 dígitos
@@ -212,10 +225,10 @@ class PaymentNotificationService {
               Logger.warning('PaymentNotificationService: No se encontró patrón EMV en hash');
             }
           } else {
-            Logger.warning('PaymentNotificationService: qr_data no contiene hash');
+            Logger.warning('PaymentNotificationService: qr_data no contiene string válido');
           }
         } else {
-          Logger.warning('PaymentNotificationService: qr_data no encontrado o no es Map');
+          Logger.warning('PaymentNotificationService: qr_data no encontrado');
         }
         
         // Fallback: usar order_id del JSON si existe

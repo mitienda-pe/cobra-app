@@ -775,21 +775,33 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
         // Extraer QR ID de la respuesta  
         Logger.info('[QR] ANTES de extractQrId - qrResponse: ${qrResponse.substring(0, 300)}...');
         
-        // NUEVA LÓGICA DE EXTRACCIÓN DIRECTA (TEMPORAL PARA DEBUG)
+        // LÓGICA DE EXTRACCIÓN CORREGIDA
         String? qrId;
         try {
           final jsonData = json.decode(qrResponse);
-          if (jsonData.containsKey('qr_data') && jsonData['qr_data'] is Map) {
-            final qrData = jsonData['qr_data'] as Map<String, dynamic>;
+          Logger.info('[QR] JSON recibido: ${jsonData.keys}');
+          
+          if (jsonData.containsKey('qr_data') && jsonData['qr_data'] != null) {
+            final qrData = jsonData['qr_data'];
+            Logger.info('[QR] qr_data tipo: ${qrData.runtimeType}');
+            
+            // qr_data es un Object directo, no un Map anidado
             if (qrData.containsKey('hash')) {
               final hashString = qrData['hash'].toString();
+              Logger.info('[QR] Hash EMV: ${hashString.substring(0, 50)}...');
+              
+              // Buscar patrón EMV: 30 + longitud + 20 dígitos
               final emvMatch = RegExp(r'30(\d{2})(\d{20})').firstMatch(hashString);
               if (emvMatch != null) {
                 qrId = emvMatch.group(2);
-                Logger.info('[QR] ✅ QR ID EXTRAÍDO DIRECTAMENTE: $qrId');
+                Logger.info('[QR] ✅ QR ID extraído del EMV: $qrId');
+              } else {
+                Logger.warning('[QR] ❌ Patrón EMV no encontrado en hash');
+                Logger.warning('[QR] Hash completo: $hashString');
               }
             }
           }
+          
           // Fallback al order_id si no funciona la extracción EMV
           if (qrId == null && jsonData.containsKey('order_id')) {
             qrId = jsonData['order_id'].toString();

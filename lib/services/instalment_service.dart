@@ -995,19 +995,7 @@ class InstalmentService {
         // EXTRAER EL ID CORRECTO PARA NOTIFICACIONES
         String? notificationId;
         
-        // 1. Intentar extraer de qr_data.id
-        if (qrData is Map && qrData.containsKey('id')) {
-          notificationId = qrData['id']?.toString();
-          Logger.info('[QR_PROC] 🎯 ID extraído de qr_data.id: $notificationId');
-        }
-        
-        // 2. Fallback al order_id
-        if (notificationId == null && orderId != null) {
-          notificationId = orderId.toString();
-          Logger.info('[QR_PROC] ⚠️ Usando order_id como fallback: $notificationId');
-        }
-        
-        // 3. Intentar extraer del hash EMV si existe
+        // 1. PRIORIDAD: Intentar extraer del hash EMV (este es el ID que usa el webhook)
         if (qrData is Map && qrData.containsKey('hash')) {
           final hashString = qrData['hash']?.toString() ?? '';
           Logger.debug('[QR_PROC] Hash EMV disponible: ${hashString.substring(0, 50)}...');
@@ -1017,14 +1005,23 @@ class InstalmentService {
           if (emvMatch != null) {
             final emvId = emvMatch.group(2);
             Logger.info('[QR_PROC] 🔍 ID EMV encontrado: $emvId');
-            // Solo usar EMV ID si no tenemos otro
-            if (notificationId == null) {
-              notificationId = emvId;
-              Logger.info('[QR_PROC] 🎯 Usando EMV ID: $notificationId');
-            }
+            notificationId = emvId; // USAR EMV ID SIEMPRE que esté disponible
+            Logger.info('[QR_PROC] ✅ USANDO EMV ID para notificaciones: $notificationId');
           } else {
             Logger.warning('[QR_PROC] ⚠️ No se pudo extraer ID EMV del hash');
           }
+        }
+        
+        // 2. Fallback: Usar qr_data.id solo si no hay EMV ID
+        if (notificationId == null && qrData is Map && qrData.containsKey('id')) {
+          notificationId = qrData['id']?.toString();
+          Logger.info('[QR_PROC] ⚠️ Usando qr_data.id como fallback: $notificationId');
+        }
+        
+        // 3. Último recurso: order_id
+        if (notificationId == null && orderId != null) {
+          notificationId = orderId.toString();
+          Logger.info('[QR_PROC] ⚠️ Usando order_id como último recurso: $notificationId');
         }
         
         Logger.info('[QR_PROC] 🚀 ID FINAL para notificaciones: $notificationId');

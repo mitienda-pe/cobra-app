@@ -772,10 +772,34 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
         final qrResponse = await _generateQRFromAPI(invoiceAccount, amount);
         Logger.info('[QR] Respuesta recibida: ${qrResponse.substring(0, 200)}...');
         
-        // Extraer QR ID de la respuesta
+        // Extraer QR ID de la respuesta  
         Logger.info('[QR] ANTES de extractQrId - qrResponse: ${qrResponse.substring(0, 300)}...');
-        final qrId = PaymentNotificationService.extractQrId(qrResponse);
-        Logger.info('[QR] DESPUÉS de extractQrId - QR ID extraído: $qrId');
+        
+        // NUEVA LÓGICA DE EXTRACCIÓN DIRECTA (TEMPORAL PARA DEBUG)
+        String? qrId;
+        try {
+          final jsonData = json.decode(qrResponse);
+          if (jsonData.containsKey('qr_data') && jsonData['qr_data'] is Map) {
+            final qrData = jsonData['qr_data'] as Map<String, dynamic>;
+            if (qrData.containsKey('hash')) {
+              final hashString = qrData['hash'].toString();
+              final emvMatch = RegExp(r'30(\d{2})(\d{20})').firstMatch(hashString);
+              if (emvMatch != null) {
+                qrId = emvMatch.group(2);
+                Logger.info('[QR] ✅ QR ID EXTRAÍDO DIRECTAMENTE: $qrId');
+              }
+            }
+          }
+          // Fallback al order_id si no funciona la extracción EMV
+          if (qrId == null && jsonData.containsKey('order_id')) {
+            qrId = jsonData['order_id'].toString();
+            Logger.info('[QR] ⚠️ Usando order_id como fallback: $qrId');
+          }
+        } catch (e) {
+          Logger.error('[QR] Error en extracción: $e');
+        }
+        
+        Logger.info('[QR] DESPUÉS de extracción - QR ID final: $qrId');
         
         if (qrId != null) {
           _currentQRId = qrId;

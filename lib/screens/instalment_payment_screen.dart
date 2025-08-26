@@ -266,10 +266,13 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
         Row(
           children: [
             Expanded(
+              // ignore: deprecated_member_use
               child: RadioListTile<String>(
                 title: const Text('Efectivo'),
                 value: 'cash',
+                // ignore: deprecated_member_use
                 groupValue: _paymentMethod,
+                // ignore: deprecated_member_use
                 onChanged: (value) {
                   setState(() {
                     _paymentMethod = value!;
@@ -280,10 +283,13 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
               ),
             ),
             Expanded(
+              // ignore: deprecated_member_use
               child: RadioListTile<String>(
                 title: const Text('Transferencia'),
                 value: 'transfer',
+                // ignore: deprecated_member_use
                 groupValue: _paymentMethod,
+                // ignore: deprecated_member_use
                 onChanged: (value) {
                   setState(() {
                     _paymentMethod = value!;
@@ -298,10 +304,13 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
         Row(
           children: [
             Expanded(
+              // ignore: deprecated_member_use
               child: RadioListTile<String>(
                 title: const Text('POS'),
                 value: 'pos',
+                // ignore: deprecated_member_use
                 groupValue: _paymentMethod,
+                // ignore: deprecated_member_use
                 onChanged: (value) {
                   setState(() {
                     _paymentMethod = value!;
@@ -312,10 +321,13 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
               ),
             ),
             Expanded(
+              // ignore: deprecated_member_use
               child: RadioListTile<String>(
                 title: const Text('QR'),
                 value: 'qr',
+                // ignore: deprecated_member_use
                 groupValue: _paymentMethod,
+                // ignore: deprecated_member_use
                 onChanged: (value) {
                   setState(() {
                     _paymentMethod = value!;

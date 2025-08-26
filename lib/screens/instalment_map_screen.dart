@@ -646,40 +646,52 @@ class _InstalmentMapScreenState extends State<InstalmentMapScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // ignore: deprecated_member_use
             RadioListTile<InstalmentSortOption>(
               title: const Text('Fecha de vencimiento'),
               value: InstalmentSortOption.dueDate,
+              // ignore: deprecated_member_use
               groupValue: _sortOption,
+              // ignore: deprecated_member_use
               onChanged: (value) {
                 setState(() {
                   _sortOption = value!;
                 });
               },
             ),
+            // ignore: deprecated_member_use
             RadioListTile<InstalmentSortOption>(
               title: const Text('Estado'),
               value: InstalmentSortOption.status,
+              // ignore: deprecated_member_use
               groupValue: _sortOption,
+              // ignore: deprecated_member_use
               onChanged: (value) {
                 setState(() {
                   _sortOption = value!;
                 });
               },
             ),
+            // ignore: deprecated_member_use
             RadioListTile<InstalmentSortOption>(
               title: const Text('Monto'),
               value: InstalmentSortOption.amount,
+              // ignore: deprecated_member_use
               groupValue: _sortOption,
+              // ignore: deprecated_member_use
               onChanged: (value) {
                 setState(() {
                   _sortOption = value!;
                 });
               },
             ),
+            // ignore: deprecated_member_use
             RadioListTile<InstalmentSortOption>(
               title: const Text('Distancia'),
               value: InstalmentSortOption.distance,
+              // ignore: deprecated_member_use
               groupValue: _sortOption,
+              // ignore: deprecated_member_use
               onChanged: (value) {
                 setState(() {
                   _sortOption = value!;

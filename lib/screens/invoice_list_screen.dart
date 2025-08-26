@@ -824,9 +824,12 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   ) {
     return ListTile(
       title: Text(label),
+      // ignore: deprecated_member_use
       leading: Radio<InvoiceAccountStatus?>(
         value: status,
+        // ignore: deprecated_member_use
         groupValue: _selectedStatus,
+        // ignore: deprecated_member_use
         onChanged: (value) {
           setState(() {
             _selectedStatus = value;
@@ -848,9 +851,12 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   ) {
     return ListTile(
       title: Text(label),
+      // ignore: deprecated_member_use
       leading: Radio<SortOption>(
         value: option,
+        // ignore: deprecated_member_use
         groupValue: _sortOption,
+        // ignore: deprecated_member_use
         onChanged: (value) {
           setState(() {
             _sortOption = value!;

@@ -656,9 +656,12 @@ class _InvoiceMapScreenState extends State<InvoiceMapScreen> {
   Widget _buildFilterOption(BuildContext context, InvoiceAccountStatus? status, String label) {
     return ListTile(
       title: Text(label),
+      // ignore: deprecated_member_use
       leading: Radio<InvoiceAccountStatus?>(
         value: status,
+        // ignore: deprecated_member_use
         groupValue: _selectedStatus,
+        // ignore: deprecated_member_use
         onChanged: (value) {
           setState(() {
             _selectedStatus = value;
@@ -676,9 +679,12 @@ class _InvoiceMapScreenState extends State<InvoiceMapScreen> {
   Widget _buildSortOption(BuildContext context, SortOption option, String label) {
     return ListTile(
       title: Text(label),
+      // ignore: deprecated_member_use
       leading: Radio<SortOption>(
         value: option,
+        // ignore: deprecated_member_use
         groupValue: _sortOption,
+        // ignore: deprecated_member_use
         onChanged: (value) {
           setState(() {
             _sortOption = value!;

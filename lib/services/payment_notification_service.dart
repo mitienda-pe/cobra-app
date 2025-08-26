@@ -190,19 +190,23 @@ class PaymentNotificationService {
         final jsonData = json.decode(qrResponse);
         
         // Intentar extraer del hash EMV primero (más confiable)
-        if (jsonData.containsKey('qr_string') && jsonData['qr_string'] != null) {
-          final emvMatch = RegExp(r'30(\d{2})(\d{20})').firstMatch(jsonData['qr_string']);
-          if (emvMatch != null) {
-            Logger.info('PaymentNotificationService: QR ID extraído del EMV: ${emvMatch.group(2)}');
-            return emvMatch.group(2);
+        // Formato esperado: {"qr_data": {"hash": "EMV_STRING..."}}
+        if (jsonData.containsKey('qr_data') && jsonData['qr_data'] is Map) {
+          final qrData = jsonData['qr_data'] as Map<String, dynamic>;
+          if (qrData.containsKey('hash') && qrData['hash'] != null) {
+            final emvMatch = RegExp(r'30(\d{2})(\d{20})').firstMatch(qrData['hash'].toString());
+            if (emvMatch != null) {
+              Logger.info('PaymentNotificationService: QR ID extraído del hash EMV: ${emvMatch.group(2)}');
+              return emvMatch.group(2);
+            }
           }
         }
         
-        // También intentar con qr_data si existe
-        if (jsonData.containsKey('qr_data') && jsonData['qr_data'] != null) {
-          final emvMatch = RegExp(r'30(\d{2})(\d{20})').firstMatch(jsonData['qr_data'].toString());
+        // También intentar con qr_string si existe
+        if (jsonData.containsKey('qr_string') && jsonData['qr_string'] != null) {
+          final emvMatch = RegExp(r'30(\d{2})(\d{20})').firstMatch(jsonData['qr_string']);
           if (emvMatch != null) {
-            Logger.info('PaymentNotificationService: QR ID extraído del qr_data EMV: ${emvMatch.group(2)}');
+            Logger.info('PaymentNotificationService: QR ID extraído del qr_string EMV: ${emvMatch.group(2)}');
             return emvMatch.group(2);
           }
         }

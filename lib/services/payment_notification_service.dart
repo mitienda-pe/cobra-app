@@ -185,32 +185,46 @@ class PaymentNotificationService {
   /// Extrae el ID del QR desde diferentes formatos de respuesta
   static String? extractQrId(String qrResponse) {
     try {
-      // Si es JSON
+      // Si es JSON, primero intentar extraer del hash EMV
       if (qrResponse.trim().startsWith('{')) {
         final jsonData = json.decode(qrResponse);
         
-        // Buscar order_id primero (formato actual de tu API)
+        // Intentar extraer del hash EMV primero (más confiable)
+        if (jsonData.containsKey('qr_string') && jsonData['qr_string'] != null) {
+          final emvMatch = RegExp(r'30(\d{2})(\d{20})').firstMatch(jsonData['qr_string']);
+          if (emvMatch != null) {
+            Logger.info('PaymentNotificationService: QR ID extraído del EMV: ${emvMatch.group(2)}');
+            return emvMatch.group(2);
+          }
+        }
+        
+        // También intentar con qr_data si existe
+        if (jsonData.containsKey('qr_data') && jsonData['qr_data'] != null) {
+          final emvMatch = RegExp(r'30(\d{2})(\d{20})').firstMatch(jsonData['qr_data'].toString());
+          if (emvMatch != null) {
+            Logger.info('PaymentNotificationService: QR ID extraído del qr_data EMV: ${emvMatch.group(2)}');
+            return emvMatch.group(2);
+          }
+        }
+        
+        // Fallback: usar order_id del JSON si existe
         if (jsonData.containsKey('order_id')) {
+          Logger.info('PaymentNotificationService: QR ID extraído de order_id JSON: ${jsonData['order_id']}');
           return jsonData['order_id'].toString();
         }
         
-        // Fallback a otros campos comunes
+        // Fallback final: usar id_qr del JSON
         if (jsonData.containsKey('id_qr')) {
+          Logger.info('PaymentNotificationService: QR ID extraído de id_qr JSON: ${jsonData['id_qr']}');
           return jsonData['id_qr'].toString();
-        }
-        
-        if (jsonData.containsKey('qr_data') && jsonData['qr_data'] != null) {
-          final qrData = jsonData['qr_data'];
-          if (qrData.containsKey('id')) {
-            return qrData['id'].toString();
-          }
         }
       }
       
-      // Si es EMV string
-      final match = RegExp(r'3022(\d{20})').firstMatch(qrResponse);
+      // Si es EMV string directo
+      final match = RegExp(r'30(\d{2})(\d{20})').firstMatch(qrResponse);
       if (match != null) {
-        return match.group(1);
+        Logger.info('PaymentNotificationService: QR ID extraído del EMV directo: ${match.group(2)}');
+        return match.group(2);
       }
       
       Logger.warning('PaymentNotificationService: No se pudo extraer QR ID de: ${qrResponse.substring(0, 50)}...');

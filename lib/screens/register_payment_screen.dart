@@ -773,8 +773,9 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
         Logger.info('[QR] Respuesta recibida: ${qrResponse.substring(0, 200)}...');
         
         // Extraer QR ID de la respuesta
+        Logger.info('[QR] ANTES de extractQrId - qrResponse: ${qrResponse.substring(0, 300)}...');
         final qrId = PaymentNotificationService.extractQrId(qrResponse);
-        Logger.info('[QR] QR ID extraído: $qrId');
+        Logger.info('[QR] DESPUÉS de extractQrId - QR ID extraído: $qrId');
         
         if (qrId != null) {
           _currentQRId = qrId;

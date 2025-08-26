@@ -1022,6 +1022,8 @@ class InstalmentService {
               notificationId = emvId;
               Logger.info('[QR_PROC] 🎯 Usando EMV ID: $notificationId');
             }
+          } else {
+            Logger.warning('[QR_PROC] ⚠️ No se pudo extraer ID EMV del hash');
           }
         }
         

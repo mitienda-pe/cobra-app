@@ -39,6 +39,7 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
   double _cashChange = 0.0;
   String? _errorMessage;
   Map<String, dynamic>? _qrData;
+  String? _currentNotificationId;
   Timer? _countdownTimer;
   Duration? _remainingTime;
 
@@ -54,7 +55,7 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
     _cashReceivedController.dispose();
     _reconciliationCodeController.dispose();
     _countdownTimer?.cancel();
-    _notificationService.stopMonitoring(); // Limpiar servicio de notificaciones
+    _notificationService.stopMonitoring();
     super.dispose();
   }
 
@@ -474,7 +475,42 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
-                _buildExpirationInfo(),                
+                if (_currentNotificationId != null)
+                  Text(
+                    'ID Notificación: $_currentNotificationId',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                const SizedBox(height: 4),
+                _buildExpirationInfo(),
+                const SizedBox(height: 8),
+                if (_isMonitoringPayment)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.shade200),
+                    ),
+                    child: const Row(
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Esperando confirmación de pago...',
+                            style: TextStyle(
+                              color: Colors.blue,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 16),
                 // Botón para solicitar nuevo QR
                 OutlinedButton.icon(
@@ -748,77 +784,62 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
       }
     }
   }
-
-  /// Inicia el monitoreo de notificaciones de pago
-  Future<void> _startPaymentMonitoring(String qrId) async {
-    if (_isMonitoringPayment) {
-      Logger.warning('[PAY_MON] ⚠️ Ya hay un monitoreo activo');
-      return;
-    }
-
-    Logger.info('[PAY_MON] 🔔 Iniciando monitoreo para QR ID: $qrId');
-    
+  
+  /// Inicia el monitoreo de pagos QR
+  void _startPaymentMonitoring(String qrId) async {
     setState(() {
       _isMonitoringPayment = true;
     });
-
-    try {
-      await _notificationService.startMonitoring(
-        qrId: qrId,
-        onPaymentSuccess: (paymentData) {
-          Logger.info('[PAY_MON] ✅ Pago exitoso recibido: $paymentData');
-          _onPaymentSuccess(paymentData);
-        },
-        onTimeout: () {
-          Logger.warning('[PAY_MON] ⏰ Timeout del monitoreo');
-          _onPaymentTimeout();
-        },
-        timeout: const Duration(minutes: 5),
-      );
-    } catch (e) {
-      Logger.error('[PAY_MON] 💥 Error iniciando monitoreo', e);
-    }
-  }
-
-  /// Maneja el éxito del pago
-  void _onPaymentSuccess(Map<String, dynamic> paymentData) {
-    Logger.info('[PAY_SUC] 🎉 Procesando pago exitoso');
     
+    Logger.info('[PAY_MON] 🔔 Iniciando monitoreo para QR ID: $qrId');
+    
+    await _notificationService.startMonitoring(
+      qrId: qrId,
+      onPaymentSuccess: _onPaymentSuccess,
+      onTimeout: _onPaymentTimeout,
+    );
+  }
+  
+  /// Maneja el pago exitoso
+  void _onPaymentSuccess(Map<String, dynamic> paymentData) {
     if (!mounted) return;
+    
+    Logger.info('[PAY_MON] ✅ Pago recibido: $paymentData');
     
     setState(() {
       _isMonitoringPayment = false;
     });
-    
-    // Detener el timer de countdown
-    _countdownTimer?.cancel();
     
     // Mostrar mensaje de éxito
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('¡Pago recibido exitosamente!'),
+      SnackBar(
+        content: Text('¡Pago recibido! S/ ${paymentData['amount'] ?? '0.00'}'),
         backgroundColor: Colors.green,
-        duration: Duration(seconds: 3),
+        duration: const Duration(seconds: 5),
       ),
     );
     
-    // Navegar de regreso o actualizar la pantalla
-    if (Navigator.canPop(context)) {
-      Navigator.pop(context, true); // true indica que el pago fue exitoso
-    }
+    // Recargar la cuota para mostrar el nuevo estado
+    _loadInstalment();
   }
-
+  
   /// Maneja el timeout del monitoreo
   void _onPaymentTimeout() {
-    Logger.warning('[PAY_TO] ⏰ Timeout del monitoreo de pagos');
-    
     if (!mounted) return;
     
     setState(() {
       _isMonitoringPayment = false;
-      _errorMessage = 'Tiempo de espera agotado. Intenta generar un nuevo QR.';
     });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Tiempo agotado. Verifica manualmente en el historial de pagos.'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 3),
+      ),
+    );
   }
+
 
   @override
   Widget build(BuildContext context) {

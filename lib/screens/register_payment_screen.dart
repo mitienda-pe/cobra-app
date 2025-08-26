@@ -754,6 +754,7 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
   
   /// Genera un QR para pago e inicia el monitoreo de notificaciones
   Future<void> _generateQRPayment(BuildContext context, InvoiceAccount invoiceAccount) async {
+    print('🚀🚀🚀 _generateQRPayment INICIADO 🚀🚀🚀');
     if (!mounted || _isMonitoringQRPayment) return;
     
     if (_formKey.currentState!.validate()) {

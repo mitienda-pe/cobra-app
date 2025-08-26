@@ -975,19 +975,64 @@ class InstalmentService {
 
   // Método auxiliar para procesar la respuesta del QR
   Map<String, dynamic> _processQRResponse(Response response) {
-    if (kDebugMode) {
-      print('Procesando respuesta QR: ${response.data}');
-    }
-
+    Logger.info('🔍 [QR_PROC] Procesando respuesta QR...');
+    Logger.debug('[QR_PROC] Respuesta completa: ${response.data}');
+    
     if (response.data is Map) {
+      Logger.debug('[QR_PROC] Response.data es Map con keys: ${response.data.keys.toList()}');
+      
       // Formato como en el ejemplo proporcionado
       if (response.data.containsKey('success') &&
           response.data['success'] == true) {
+        
+        final qrData = response.data['qr_data'];
+        final orderId = response.data['order_id'];
+        
+        Logger.info('[QR_PROC] ✅ Respuesta SUCCESS detectada');
+        Logger.debug('[QR_PROC] qr_data: ${qrData?.toString().substring(0, 100) ?? 'null'}...');
+        Logger.debug('[QR_PROC] order_id: $orderId');
+        
+        // EXTRAER EL ID CORRECTO PARA NOTIFICACIONES
+        String? notificationId;
+        
+        // 1. Intentar extraer de qr_data.id
+        if (qrData is Map && qrData.containsKey('id')) {
+          notificationId = qrData['id']?.toString();
+          Logger.info('[QR_PROC] 🎯 ID extraído de qr_data.id: $notificationId');
+        }
+        
+        // 2. Fallback al order_id
+        if (notificationId == null && orderId != null) {
+          notificationId = orderId.toString();
+          Logger.info('[QR_PROC] ⚠️ Usando order_id como fallback: $notificationId');
+        }
+        
+        // 3. Intentar extraer del hash EMV si existe
+        if (qrData is Map && qrData.containsKey('hash')) {
+          final hashString = qrData['hash']?.toString() ?? '';
+          Logger.debug('[QR_PROC] Hash EMV disponible: ${hashString.substring(0, 50)}...');
+          
+          // Buscar patrón EMV: 30 + longitud + 20 dígitos
+          final emvMatch = RegExp(r'30(\d{2})(\d{20})').firstMatch(hashString);
+          if (emvMatch != null) {
+            final emvId = emvMatch.group(2);
+            Logger.info('[QR_PROC] 🔍 ID EMV encontrado: $emvId');
+            // Solo usar EMV ID si no tenemos otro
+            if (notificationId == null) {
+              notificationId = emvId;
+              Logger.info('[QR_PROC] 🎯 Usando EMV ID: $notificationId');
+            }
+          }
+        }
+        
+        Logger.info('[QR_PROC] 🚀 ID FINAL para notificaciones: $notificationId');
+        
         return {
           'success': true,
           'qr_data': response.data['qr_data'] ?? '',
           'qr_image_url': response.data['qr_image_url'] ?? '',
           'order_id': response.data['order_id'] ?? '',
+          'notification_id': notificationId, // NUEVO CAMPO CRÍTICO
           'expiration': response.data['expiration'] ?? '',
         };
       }

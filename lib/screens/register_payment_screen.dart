@@ -754,7 +754,15 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
   
   /// Genera un QR para pago e inicia el monitoreo de notificaciones
   Future<void> _generateQRPayment(BuildContext context, InvoiceAccount invoiceAccount) async {
-    if (!mounted || _isMonitoringQRPayment) return;
+    Logger.info('🚀🚀🚀 _generateQRPayment INICIADO 🚀🚀🚀');
+    Logger.debug('InvoiceAccount ID: ${invoiceAccount.id}');
+    Logger.debug('InvoiceAccount invoiceNumber: ${invoiceAccount.invoiceNumber}');
+    Logger.debug('InvoiceAccount totalAmount: ${invoiceAccount.totalAmount}');
+    
+    if (!mounted || _isMonitoringQRPayment) {
+      Logger.warning('_generateQRPayment cancelado: mounted=$mounted, isMonitoring=$_isMonitoringQRPayment');
+      return;
+    }
     
     if (_formKey.currentState!.validate()) {
       // Capture context and scaffold messenger before async operations
@@ -901,22 +909,33 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
   /// Llama a la API real para generar QR
   Future<String> _generateQRFromAPI(InvoiceAccount invoiceAccount, double amount) async {
     try {
+      final url = '${AppConfig.baseUrl}/api/payments/generate-instalment-qr/${invoiceAccount.id}?amount=$amount';
+      Logger.info('[API] 🌐 Generando QR - URL: $url');
+      Logger.debug('[API] InvoiceAccount.id: ${invoiceAccount.id}');
+      Logger.debug('[API] Amount: $amount');
+      
       final response = await http.get(
-        Uri.parse('${AppConfig.baseUrl}/api/payments/generate-instalment-qr/${invoiceAccount.id}?amount=$amount'),
+        Uri.parse(url),
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
       );
       
+      Logger.info('[API] Response status: ${response.statusCode}');
+      Logger.debug('[API] Response headers: ${response.headers}');
+      
       if (response.statusCode == 200) {
+        Logger.info('[API] ✅ QR generado exitosamente');
+        Logger.debug('[API] Response body (primeros 500 chars): ${response.body.length > 500 ? "${response.body.substring(0, 500)}..." : response.body}');
         // Retornar la respuesta completa como string para poder extraer el order_id
         return response.body;
       } else {
+        Logger.error('[API] ❌ Error generando QR: ${response.statusCode} - ${response.body}');
         throw Exception('Error generando QR: ${response.statusCode}');
       }
     } catch (e) {
-      Logger.error('Error al generar QR desde API: $e');
+      Logger.error('[API] 💥 Exception al generar QR desde API', e);
       rethrow;
     }
   }

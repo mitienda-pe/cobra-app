@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'dart:async';
 import '../models/instalment.dart';
 import '../services/instalment_service.dart';
+import '../services/payment_notification_service.dart';
 import '../utils/currency_formatter.dart';
+import '../utils/logger.dart';
 
 class InstalmentPaymentScreen extends StatefulWidget {
   final int instalmentId;
@@ -21,6 +23,7 @@ class InstalmentPaymentScreen extends StatefulWidget {
 
 class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
   final InstalmentService _instalmentService = InstalmentService();
+  final PaymentNotificationService _notificationService = PaymentNotificationService();
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _cashReceivedController = TextEditingController();
   final TextEditingController _reconciliationCodeController = TextEditingController();
@@ -28,6 +31,7 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
   bool _isLoading = true;
   bool _isProcessing = false;
   bool _isGeneratingQR = false;
+  bool _isMonitoringPayment = false;
   Instalment? _instalment;
   String _paymentMethod = 'cash'; // Valores posibles: 'cash', 'transfer', 'pos', 'qr'
   double _amountToPay = 0.0;
@@ -50,6 +54,7 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
     _cashReceivedController.dispose();
     _reconciliationCodeController.dispose();
     _countdownTimer?.cancel();
+    _notificationService.stopMonitoring(); // Limpiar servicio de notificaciones
     super.dispose();
   }
 
@@ -694,13 +699,21 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
   Future<void> _generateQRCode() async {
     if (_instalment == null) return;
     
+    Logger.info('🚀🚀🚀 _generateQRCode INICIADO 🚀🚀🚀');
+    Logger.debug('[QR_GEN] Instalment ID: ${_instalment!.id}');
+    
     setState(() {
       _isGeneratingQR = true;
       _errorMessage = null;
     });
     
     try {
+      Logger.info('[QR_GEN] 📱 Llamando a generateInstalmentQR...');
       final result = await _instalmentService.generateInstalmentQR(_instalment!.id.toString());
+      
+      Logger.info('[QR_GEN] 📋 Resultado recibido: ${result.keys.toList()}');
+      Logger.debug('[QR_GEN] Success: ${result['success']}');
+      Logger.debug('[QR_GEN] Notification ID: ${result['notification_id']}');
       
       if (mounted) {
         setState(() {
@@ -708,13 +721,25 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
           
           if (result['success'] == true) {
             _qrData = result;
+            
+            // INICIAR MONITOREO DE NOTIFICACIONES
+            final notificationId = result['notification_id'];
+            if (notificationId != null && notificationId.toString().isNotEmpty) {
+              Logger.info('[QR_GEN] 🔔 Iniciando monitoreo con ID: $notificationId');
+              _startPaymentMonitoring(notificationId.toString());
+            } else {
+              Logger.warning('[QR_GEN] ⚠️ No se encontró notification_id válido');
+            }
+            
             _startCountdownTimer();
           } else {
             _errorMessage = result['message'] ?? 'Error al generar el código QR';
+            Logger.error('[QR_GEN] ❌ Error en generación: $_errorMessage');
           }
         });
       }
     } catch (e) {
+      Logger.error('[QR_GEN] 💥 Exception al generar QR', e);
       if (mounted) {
         setState(() {
           _isGeneratingQR = false;
@@ -722,6 +747,77 @@ class _InstalmentPaymentScreenState extends State<InstalmentPaymentScreen> {
         });
       }
     }
+  }
+
+  /// Inicia el monitoreo de notificaciones de pago
+  Future<void> _startPaymentMonitoring(String qrId) async {
+    if (_isMonitoringPayment) {
+      Logger.warning('[PAY_MON] ⚠️ Ya hay un monitoreo activo');
+      return;
+    }
+
+    Logger.info('[PAY_MON] 🔔 Iniciando monitoreo para QR ID: $qrId');
+    
+    setState(() {
+      _isMonitoringPayment = true;
+    });
+
+    try {
+      await _notificationService.startMonitoring(
+        qrId: qrId,
+        onPaymentSuccess: (paymentData) {
+          Logger.info('[PAY_MON] ✅ Pago exitoso recibido: $paymentData');
+          _onPaymentSuccess(paymentData);
+        },
+        onTimeout: () {
+          Logger.warning('[PAY_MON] ⏰ Timeout del monitoreo');
+          _onPaymentTimeout();
+        },
+        timeout: const Duration(minutes: 5),
+      );
+    } catch (e) {
+      Logger.error('[PAY_MON] 💥 Error iniciando monitoreo', e);
+    }
+  }
+
+  /// Maneja el éxito del pago
+  void _onPaymentSuccess(Map<String, dynamic> paymentData) {
+    Logger.info('[PAY_SUC] 🎉 Procesando pago exitoso');
+    
+    if (!mounted) return;
+    
+    setState(() {
+      _isMonitoringPayment = false;
+    });
+    
+    // Detener el timer de countdown
+    _countdownTimer?.cancel();
+    
+    // Mostrar mensaje de éxito
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('¡Pago recibido exitosamente!'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 3),
+      ),
+    );
+    
+    // Navegar de regreso o actualizar la pantalla
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context, true); // true indica que el pago fue exitoso
+    }
+  }
+
+  /// Maneja el timeout del monitoreo
+  void _onPaymentTimeout() {
+    Logger.warning('[PAY_TO] ⏰ Timeout del monitoreo de pagos');
+    
+    if (!mounted) return;
+    
+    setState(() {
+      _isMonitoringPayment = false;
+      _errorMessage = 'Tiempo de espera agotado. Intenta generar un nuevo QR.';
+    });
   }
 
   @override

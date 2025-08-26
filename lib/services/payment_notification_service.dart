@@ -30,9 +30,12 @@ class PaymentNotificationService {
     }
 
     _isMonitoring = true;
-    Logger.info('PaymentNotificationService: Iniciando monitoreo para QR: $qrId');
+    Logger.info('🔔 PaymentNotificationService: Iniciando monitoreo para QR: $qrId');
+    Logger.debug('[NOTIF] QR ID recibido: "$qrId" (length: ${qrId.length})');
+    Logger.debug('[NOTIF] QR ID es válido: ${qrId.isNotEmpty}');
 
     // Intentar SSE primero
+    Logger.info('[NOTIF] 🌐 Intentando conectar por SSE...');
     bool sseSuccess = await _startSSE(qrId, onPaymentSuccess);
     
     if (!sseSuccess) {
@@ -54,6 +57,8 @@ class PaymentNotificationService {
   Future<bool> _startSSE(String qrId, Function(Map<String, dynamic>) onPaymentSuccess) async {
     try {
       final url = '${AppConfig.baseUrl}/api/payment-stream/$qrId';
+      Logger.info('[SSE] 🔗 URL: $url');
+      Logger.debug('[SSE] QR ID en URL: $qrId');
       
       // Crear stream SSE
       final sseStream = SSEClient.subscribeToSSE(
@@ -105,15 +110,20 @@ class PaymentNotificationService {
 
   /// Inicia polling como fallback
   void _startPolling(String qrId, Function(Map<String, dynamic>) onPaymentSuccess) {
+    Logger.info('[POLLING] 🔄 Iniciando polling para QR: $qrId');
     int attempts = 0;
     const maxAttempts = 100; // 5 minutos (3s * 100)
     
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       attempts++;
+      Logger.debug('[POLLING] Intento #$attempts/$maxAttempts para QR: $qrId');
       
       try {
+        final pollUrl = '${AppConfig.baseUrl}/api/payment-events/$qrId';
+        Logger.debug('[POLLING] URL: $pollUrl');
+        
         final response = await http.get(
-          Uri.parse('${AppConfig.baseUrl}/api/payment-events/$qrId'),
+          Uri.parse(pollUrl),
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',

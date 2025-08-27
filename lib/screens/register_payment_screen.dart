@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -878,14 +879,13 @@ class _RegisterPaymentScreenState extends State<RegisterPaymentScreen> {
       _currentQRId = null;
     });
     
-    // Navegar a pantalla de recibo o detalle del pago
-    final paymentId = paymentData['payment_id']?.toString();
-    if (paymentId != null) {
-      context.go('/payment-receipt/$paymentId');
-    } else {
-      // Fallback: volver a la pantalla anterior
-      Navigator.of(context).pop();
-    }
+    // Esperar 3 segundos para que el toast se muestre completamente, luego redirigir a cuotas
+    Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        Logger.info('Redirigiendo a pantalla de cuotas después del pago exitoso');
+        context.go('/instalments?refresh=true');
+      }
+    });
   }
   
   /// Maneja el timeout del monitoreo de pagos

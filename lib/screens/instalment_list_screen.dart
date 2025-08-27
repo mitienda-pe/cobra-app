@@ -38,6 +38,14 @@ class _InstalmentListScreenState extends State<InstalmentListScreen> {
     // Cargar las cuotas al iniciar la pantalla
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        // Verificar si viene de un pago exitoso
+        final uri = GoRouterState.of(context).uri;
+        final refreshParam = uri.queryParameters['refresh'];
+        
+        if (refreshParam == 'true') {
+          Logger.info('Detectado refresh desde pago exitoso - refrescando cuotas');
+        }
+        
         _loadInstalments();
       }
     });
@@ -392,20 +400,20 @@ class _InstalmentListScreenState extends State<InstalmentListScreen> {
             },
           ),
           ListTile(
+            leading: const Icon(Icons.receipt),
+            title: const Text('Facturas'),
+            onTap: () {
+              Navigator.pop(context); // Cerrar el drawer
+              GoRouter.of(context).go('/invoices');
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.receipt_long),
             title: const Text('Cobranza'),
             selected: true,
             onTap: () {
               Navigator.pop(context); // Cerrar el drawer
               GoRouter.of(context).go('/instalments');
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.receipt),
-            title: const Text('Facturas'),
-            onTap: () {
-              Navigator.pop(context); // Cerrar el drawer
-              GoRouter.of(context).go('/invoices');
             },
           ),
           ListTile(

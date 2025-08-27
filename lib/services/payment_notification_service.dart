@@ -34,13 +34,22 @@ class PaymentNotificationService {
     Logger.debug('[NOTIF] QR ID recibido: "$qrId" (length: ${qrId.length})');
     Logger.debug('[NOTIF] QR ID es válido: ${qrId.isNotEmpty}');
 
-    // Intentar SSE primero
+    // Intentar SSE primero, pero también iniciar polling como respaldo
     Logger.info('[NOTIF] 🌐 Intentando conectar por SSE...');
     bool sseSuccess = await _startSSE(qrId, onPaymentSuccess);
     
     if (!sseSuccess) {
-      Logger.info('PaymentNotificationService: SSE falló, iniciando polling');
+      Logger.info('PaymentNotificationService: SSE falló inmediatamente, iniciando polling');
       _startPolling(qrId, onPaymentSuccess);
+    } else {
+      // SSE se inició, pero agregar polling como backup después de 5 segundos
+      Logger.info('PaymentNotificationService: SSE iniciado, configurando polling backup en 5s');
+      Timer(const Duration(seconds: 5), () {
+        if (_isMonitoring && _pollingTimer == null) {
+          Logger.info('PaymentNotificationService: Activando polling backup (SSE no ha respondido)');
+          _startPolling(qrId, onPaymentSuccess);
+        }
+      });
     }
 
     // Timeout de seguridad
